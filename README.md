@@ -1,173 +1,234 @@
-# Nance Weekly Wins – Student Financial Discipline Feature
+# Nance Weekly Wins – User-Controlled Budgeting Habit Demo
 
 > **"Small weekly wins. Better money habits."**
 
-Interactive web demo and financial calculation engine for **Nance**, an Indian personal finance app designed for college students living in hostels and PGs who manage a fixed monthly allowance from their parents.
+A simple, user-controlled financial discipline demo for **Nance**.
+
+Rather than hardcoding student allowances, PG rent, or fixed lifestyle assumptions, this feature works for **any user** who wants to set an overall monthly budget, allocate weekly spending limits, track expenses by category, finish each week to claim weekly wins, and see their cumulative monthly performance.
 
 ---
 
-## 1. Product Context & Philosophy
+## 1. Core User Flow
 
-College students receiving a monthly allowance often face the **"month-end crunch"**: spending freely in the first two weeks and struggling on Maggi and borrowed money in the final week.
+The entire experience centers around one intuitive habit loop:
 
-### Example User Persona
-- **Monthly Allowance**: ₹10,000 (from parents)
-- **Fixed PG Rent**: ₹5,000 (fixed commitment, isolated outside weekly spending)
-- **Flexible Monthly Budget**: ₹5,000 (₹10,000 – ₹5,000)
-- **Planned Weekly Spending**: ₹1,000 / week (4-week total: ₹4,000)
-- **Monthly Savings Target**: ₹500
-- **Unallocated Buffer**: ₹500
-
-### The Core Habit Loop: Weekly Wins
-Instead of intimidating students with complex monthly budgeting, **Weekly Wins** breaks the month into bite-sized weekly limits:
-1. **Pace**: Spend within ₹1,000 each week.
-2. **Win**: Celebrate staying within budget with satisfying visual badges and contribution heatmap blocks.
-3. **Recover**: If an off-week happens (e.g. ₹1,050 in Week 2), **cumulative progress is never destroyed or reset**. Spending less in Week 3 (e.g. ₹800) recovers cumulative performance and protects the monthly goal!
-
----
-
-## 2. Feature Walkthrough
-
-### A. Monthly Money Plan
-- Visual blueprint displaying Monthly Allowance (₹10,000), Fixed PG Rent (₹5,000), Flexible Pool (₹5,000), 4-Week Planned Spending (₹4,000), and Savings Target (₹500).
-- **Fixed Commitment Isolation**: Rent is categorized as a fixed obligation and never counts against flexible weekly spending.
-- **Interactive Plan Customizer**: Allows students to adjust allowance, rent, weekly budgets, and savings target with instant recalculations.
-
-### B. Weekly Spending Tracker
-- Four dedicated week cards (Week 1 to Week 4) showing:
-  - Weekly spending limit.
-  - Actual eligible spending.
-  - Remaining budget (Under budget) or Overspending.
-  - Percentage variance under/over budget.
-  - Weekly achievement status badge.
-- Interactive category expense breakdown for each week (Food & Dining, Groceries, Transportation, Shopping, Entertainment, Personal Care).
-
-### C. Weekly Wins Calendar
-- **GitHub Contribution Calendar Visualization**:
-  - **Emerald Green**: Within budget (Weekly Win!).
-  - **Warm Amber**: Above budget (Empathetic note).
-  - **Slate Grey**: Upcoming / Rest days.
-- **28-Day Heatmap Grid**: Daily spend density indicator showing mindful vs heavy spending days.
-- **Interactive Micro-interactions**: Clicking any week card filters the view and fires confetti for claimed weekly wins!
-
-### D. Cumulative Monthly Progress (Core Feature)
-- **Mathematical Formula**:
-  $$\text{Monthly Planned Flexible Budget} = \sum_{i=1}^{4} \text{Weekly Budget}_i = ₹4,000$$
-  $$\text{Monthly Under-Budget Amount} = \text{Total Planned Budget} - \text{Total Actual Eligible Spending} = ₹4,000 - ₹3,600 = +₹400$$
-  $$\text{Monthly Performance \%} = \left(\frac{\text{Monthly Under-Budget Amount}}{\text{Total Planned Budget}}\right) \times 100 = 10\% \text{ under budget}$$
-- **The Non-Punitive Recovery Stepper**:
-  - Displays the 4-week cumulative trajectory: Week 1 (+₹100) $\to$ Week 2 (+₹50 net) $\to$ Week 3 (+₹250 net, **Recovered!**) $\to$ Week 4 (+₹400 net, **Finished Strong!**).
-  - Demonstrates that one overspending week does **not** wipe out student progress.
-- **Accurate Financial Terminology**: Termed **"unspent planned budget"** or **"under-budget amount"** (not "confirmed savings", as bank savings cannot be established purely from debit transaction logs).
-
-### E. Transaction Breakdown & Audit Log
-- Interactive expense ledger with search, category filtering, and week isolation.
-- **Eligibility Badges**: Clearly flags whether an expense is an *Eligible Flexible Debit* (counts against weekly budget) or an *Excluded Outflow* (Rent, Credit Card Settlements, ATM Cash, Self Transfers, Friend Loans).
+```
+1. Set Monthly Budget
+       │
+       ▼
+2. Allocate Weekly Budgets (Weeks 1 to 4)
+       │
+       ▼
+3. Add Expenses during the Week (Auto Category-wise Aggregation)
+       │
+       ▼
+4. Click "Finish Week" ──► Calculates % Under/Over & Awards Weekly Win
+       │
+       ▼
+5. Repeat for Next Week
+       │
+       ▼
+6. View Final Monthly Results across all Completed Weeks
+```
 
 ---
 
-## 3. Database Schema
+## 2. Key Features
 
-The implementation builds on the supplied database schema:
+### A. Monthly Budget Setup & Overview
+- **User-Controlled Limits**: Set any monthly budget (e.g. ₹10,000) and divide it across 4 weeks (e.g. ₹2,000, ₹2,500, ₹2,000, ₹2,500).
+- **Auto-Split Utility**: Quickly split unallocated monthly budget evenly across weeks.
+- **Allocation Health Indicator**: Clear visual feedback showing allocated weekly totals versus monthly budget ceiling and unallocated buffer.
+- **Provisional vs Final Indicator**: Clearly flags whether current progress is **Month-to-Date (Provisional)** or **Final Monthly Result** once all 4 weeks are finished.
+
+### B. Weekly Wins Overview Strip
+- Compact 4-week overview card strip showing:
+  - Week code & date range.
+  - Weekly budget limit.
+  - Total eligible amount spent.
+  - Result status:
+    - **Green badge**: `+20% Win` (completed under budget).
+    - **Amber badge**: `-8% Over` (completed over budget).
+    - **Grey badge**: `In Progress` (unfinished week).
+- Click any week to immediately switch context and inspect its category breakdown and transactions.
+
+### C. Weekly Expense Tracker (The Core Interaction)
+For the selected active week, the app displays:
+- Weekly budget, total spent, remaining budget, and spending percentage.
+- **Finish Week Action**:
+  - Prominent **Finish Week** button.
+  - Calculates weekly difference: `Weekly Budget - Total Eligible Weekly Spending`.
+  - Calculates weekly percentage: `(Weekly Difference / Weekly Budget) * 100`.
+  - **Weekly Win (Under Budget)**: Green badge and positive feedback:
+    > *"You stayed 20% under budget! You kept ₹400 unspent."*
+  - **Above Budget (Overspending)**: Warm amber badge with zero-guilt encouragement:
+    > *"You went 10% over this week's budget. That's okay. You can start fresh next week."*
+  - Locks the week as completed and preserves its result without duplicate triggers. Includes a **Reopen** option if the user needs to adjust.
+
+### D. Category-Wise Spending Breakdown
+Expenses are automatically grouped from eligible debit transactions belonging to the selected week:
+- Food & Dining
+- Groceries
+- Transportation
+- Shopping
+- Bills
+- Entertainment
+- Personal Care
+- Other categories from the official taxonomy.
+
+Each category displays the amount spent, percentage of week's total spending, and transaction count with visual bars.
+
+### E. Add Demo Expenses (Interactive Simulator)
+- **Add Custom Expense Form**: Enter Amount, Category, Date, Payment Mode (UPI, Card, Cash, Net Banking), and Merchant Name.
+- **1-Click Sample Expense Buttons**: Instantly add common expenses (`+ ₹40 Food & Dining`, `+ ₹250 Groceries`, `+ ₹60 Transportation`, `+ ₹180 Shopping`) to watch category totals, remaining budget, and weekly results recalculate in real time.
+
+### F. Overall Monthly Results
+- Calculated from **actual transactions** across the month, not by averaging weekly percentages.
+- Displays:
+  - Monthly budget.
+  - Total eligible spending.
+  - Unspent planned budget (or overspending).
+  - Monthly percentage under/over budget.
+  - Number of weekly wins claimed (e.g. 3 of 4 weeks).
+  - Full week-by-week audit table.
+- **Accurate Terminology**: Called **"Unspent Planned Budget"** or **"Under Budget"** (never "confirmed savings", as bank savings cannot be established purely from debit transaction logs).
+
+---
+
+## 3. Mathematical Formulas
+
+### Weekly Formulas
+$$\text{Weekly Difference} = \text{Weekly Budget} - \text{Total Eligible Weekly Spending}$$
+
+$$\text{Weekly Percentage} = \left(\frac{\text{Weekly Difference}}{\text{Weekly Budget}}\right) \times 100$$
+
+### Monthly Formulas
+$$\text{Monthly Difference} = \text{Monthly Budget} - \text{Total Monthly Eligible Spending}$$
+
+$$\text{Monthly Percentage} = \left(\frac{\text{Monthly Difference}}{\text{Monthly Budget}}\right) \times 100$$
+
+---
+
+## 4. Transaction Eligibility & Accounting Rules
+
+To prevent distorted spending numbers and double-counting:
+
+### Included Eligible Spending
+Debits from legitimate expense categories:
+- Food & Dining, Groceries, Shopping, Bills, Travel, Transportation, Fuel / EV Charging, Entertainment, Subscriptions, Housing & Utilities, Personal Care, Hospitals & Pharmacy, Fitness & Wellness, Education, Gifts & Donations, Electronics, Insurance Premiums, EMIs & Loans.
+
+### Excluded Money Movements
+Filtered out automatically to avoid double-counting:
+- **Credit Card Settlements & Payments**: Prevents double-counting card purchases already accounted for at transaction time.
+- **Self Transfers**: Internal transfers between accounts or digital wallet top-ups.
+- **Cash Withdrawals (ATM)**: Outflow counted when spent on actual purchases.
+- **Investments (Outflow)**: SIPs / Mutual funds / Stock investments (capital allocations, not consumption).
+- **Lend & Borrow**: Temporary peer splits and repayments.
+- **Friends & Family**: Peer-to-peer money transfers.
+
+### Attribution Rule
+Transactions are strictly filtered using **`txn_date`** (the actual purchase date) rather than `arrived_at` (feed parsing arrival).
+
+---
+
+## 5. Database Schema
+
+Built directly on the assignment schema in SQLite (`nance_weekly_wins.db`):
 
 ```sql
--- Existing Tables
-users (user_id, name, city, joined_on)
-transactions (txn_id, user_id, txn_date, txn_time, amount, transaction_type, payment_mode, main_category, sub_category, merchant_name, person_name, source, arrived_at)
-budgets (budget_id, user_id, main_category, period_type, amount, from_date, to_date)
-app_activity (activity_id, user_id, date)
+-- 1. Users
+CREATE TABLE users (
+    user_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    joined_on TEXT NOT NULL
+);
 
--- Additional Table: user_financial_profile
--- Reason: Captures student life stage, hostel/PG living arrangement, monthly allowance,
--- fixed rent, and savings targets required to personalize weekly budgets.
-user_financial_profile (user_id, life_stage, living_arrangement, monthly_allowance, fixed_rent, monthly_savings_target)
+-- 2. Budgets (Used for both monthly ceiling and weekly targets)
+CREATE TABLE budgets (
+    budget_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    main_category TEXT NOT NULL,
+    period_type TEXT NOT NULL,       -- 'monthly' or 'weekly'
+    week_index INTEGER,              -- 1, 2, 3, 4 for weekly records
+    amount REAL NOT NULL,
+    from_date TEXT NOT NULL,
+    to_date TEXT NOT NULL,
+    is_completed INTEGER DEFAULT 0,  -- 1 when user clicks "Finish Week"
+    completed_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
 
--- Additional Table: weekly_budget_progress
--- Reason: Persists computed weekly achievement history for fast retrieval and contribution calendar rendering.
-weekly_budget_progress (progress_id, user_id, week_start, week_end, budget_amount, actual_spending, under_budget_amount, status)
+-- 3. Transactions
+CREATE TABLE transactions (
+    txn_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    txn_date TEXT NOT NULL,
+    txn_time TEXT NOT NULL,
+    amount REAL NOT NULL,
+    transaction_type TEXT NOT NULL,  -- 'debit' or 'credit'
+    payment_mode TEXT NOT NULL,      -- 'UPI', 'Card', 'Net Banking', 'Cash'
+    main_category TEXT NOT NULL,
+    sub_category TEXT,
+    merchant_name TEXT,
+    person_name TEXT,
+    source TEXT,
+    arrived_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- 4. App Activity
+CREATE TABLE app_activity (
+    activity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
 ```
 
 ---
 
-## 4. Transaction Calculation & Accounting Rules
+## 6. Verification & Automated Test Suite
 
-1. **Eligible Debits Included in Weekly Flexible Spending**:
-   - `Groceries` (Blinkit, Zepto, Local Kirana, Nature's Basket)
-   - `Food & Dining` (Swiggy, Zomato, Campus Canteen, Mess Extras, Chai Point)
-   - `Transportation` (Auto QR, Namma Yatri, Metro card recharge, Uber)
-   - `Shopping` (Stationery, College notes, Books, Apparel)
-   - `Entertainment` (BookMyShow student tickets, Spotify, Steam)
-   - `Personal Care` (Apollo Pharmacy, Grooming, Toiletries)
+The test suite validates all 10 required behaviors:
+1. Weekly spending calculation.
+2. Category-wise aggregation.
+3. Under-budget percentage (`₹2,000` budget, `₹1,600` spent $\to$ `20% under budget`).
+4. Overspending percentage (`₹2,000` budget, `₹2,200` spent $\to$ `10% above budget`).
+5. Monthly calculation across multiple weeks (`₹10,000` budget, `₹8,000` spent $\to$ `20% under budget`).
+6. Transactions excluded from eligible spending (Transfers, Cash, Settlements, Investments).
+7. Credit card settlement double-counting prevention.
+8. Week completion and duplicate completion prevention.
+9. Expenses added after a week is completed.
+10. Incomplete weeks and provisional month-to-date calculations.
 
-2. **Excluded Transactions**:
-   - `Rent`: Handled as a fixed commitment outside flexible weekly budgets.
-   - `Self Transfers`: Wallet loads (Paytm/PhonePe) or transfers between own accounts.
-   - `Credit Card Payments & Settlements`: Excluded to avoid double-counting card purchases.
-   - `Investments (Outflow)`: Mutual fund SIPs, Groww/Zerodha.
-   - `Cash Withdrawals`: ATM cash withdrawals (spending is tracked at transaction time).
-   - `Lend & Borrow`: Hostel splits and repayments to friends.
-
-3. **Date & Type Rules**:
-   - Strictly filter on `txn_date` (the actual transaction date) rather than `arrived_at` (SMS parsing/feed arrival).
-   - Only count `transaction_type = 'debit'`.
-
-4. **Ethical Health & Essentials Policy**:
-   - The app explicitly states: **"Never skip essential purchases such as groceries, medicine, doctor visits, or rent just to protect a streak."** Physical and mental health always take precedence over a gamified badge.
-
----
-
-## 5. Synthetic Personas
-
-The database comes pre-seeded with 4 realistic Indian student profiles:
-1. **Aarav Sharma (Bengaluru)** – *The Canonical Recovery Story*:
-   - Allowance: ₹10,000 | Rent: ₹5,000 | Weekly Budget: ₹1,000 | Savings Target: ₹500
-   - W1: ₹900 spent (Win, 10% under)
-   - W2: ₹1,050 spent (Above budget by ₹50)
-   - W3: ₹800 spent (Win, Recovered!)
-   - W4: ₹850 spent (Win, Finished strong!)
-   - **Month Total**: ₹3,600 spent of ₹4,000 budget $\to$ **₹400 unspent planned budget (10% under budget)**.
-2. **Sneha Patel (Pune)** – *The Disciplined Saver*: 4 out of 4 Weekly Wins achieved.
-3. **Rohan Verma (Delhi)** – *The Fest Spender*: High Week 2 blowout, recovered by cooking in room in Week 3 & 4.
-4. **Ananya Iyer (Chennai)** – *Essential Care Case*: Emergency pharmacy & doctor consultation handled gracefully without shame.
-
----
-
-## 6. How to Run & Test
-
-### Prerequisites
-- Node.js (v18+) & npm
-- Python (3.9+)
-
-### 1. Regenerate Synthetic Data
-```bash
-python scripts/generate_synthetic_data.py
-```
-*Generates the SQLite database `nance_weekly_wins.db` and exports `src/data/mockData.json`.*
-
-### 2. Run Python Calculation Verification
+### Run Python Verification
 ```bash
 python scripts/verify_calculations.py
 ```
 
-### 3. Run Automated Unit Tests (Vitest)
+### Run Vitest Unit Tests
 ```bash
 npm test
 ```
 
-### 4. Build and Preview the Web App
+### Build Check
 ```bash
 npm run build
-npm run preview
-```
-Or start live development server:
-```bash
-npm run dev
 ```
 
 ---
 
-## 7. Tech Stack
-- **Frontend**: React 18, TypeScript, Tailwind CSS, Lucide Icons, Canvas-Confetti.
-- **Backend / Data**: SQLite3, Python 3.10, JSON data pipeline.
-- **Testing**: Vitest, Python Assertions.
-- **Build**: Vite 6.
+## 7. How to Run the Demo
+
+```bash
+# Start live development server
+npm run dev
+```
+
+Visit `http://localhost:5173`:
+1. Check or customize your **Monthly & Weekly Budgets** via the **"Set Budgets"** button.
+2. Review the **4-Week Strip**; Week 1 is already finished (20% Win) and Week 2 is in-progress.
+3. Click any **"+ Add Demo Expense"** button or add a custom expense to watch category bars and remaining budget update instantly.
+4. Click **"Finish Week"** on Week 2 to calculate its result and award a Weekly Win or Above Budget badge.
+5. Check the **Overall Monthly Results** card at the bottom to see your updated month-to-date and completed weeks summary.
+6. Click **"Reset Demo"** at any time to start fresh.

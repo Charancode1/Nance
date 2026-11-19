@@ -1,23 +1,44 @@
 import {
   Transaction,
   Budget,
-  UserFinancialProfile,
   WeeklyCalculation,
   MonthlyCalculation,
-  CumulativePoint,
+  CategorySpend,
 } from '../types';
 
-export const ELIGIBLE_CATEGORIES = new Set<string>([
-  'Groceries',
+/**
+ * Eligible spending categories from the schema.
+ * Represents consumption purchases.
+ */
+export const ELIGIBLE_SPENDING_CATEGORIES = [
   'Food & Dining',
-  'Transportation',
+  'Groceries',
   'Shopping',
+  'Bills',
+  'Travel',
+  'Transportation',
+  'Fuel / EV Charging',
   'Entertainment',
+  'Subscriptions',
+  'Housing & Utilities',
   'Personal Care',
-]);
+  'Hospitals & Pharmacy',
+  'Fitness & Wellness',
+  'Education',
+  'Gifts & Donations',
+  'Electronics',
+  'Insurance Premiums',
+  'EMIs & Loans',
+  'General Merchandise',
+] as const;
 
-export const EXCLUDED_CATEGORIES = new Set<string>([
-  'Rent',
+export const ELIGIBLE_CATEGORIES_SET = new Set<string>(ELIGIBLE_SPENDING_CATEGORIES);
+
+/**
+ * Excluded money movements from the schema.
+ * Prevents double-counting credit card purchases, internal transfers, and cash movements.
+ */
+export const EXCLUDED_CATEGORIES = [
   'Self Transfers',
   'Credit Card Payments',
   'Credit Card Settlements',
@@ -25,247 +46,300 @@ export const EXCLUDED_CATEGORIES = new Set<string>([
   'Cash Withdrawals',
   'Lend',
   'Borrow',
-]);
+  'Friends & Family',
+] as const;
+
+export const EXCLUDED_CATEGORIES_SET = new Set<string>(EXCLUDED_CATEGORIES);
 
 /**
- * Checks whether a given transaction counts towards flexible weekly spending.
- *
- * Rules:
- * - Must be transaction_type === 'debit'
- * - Main category must be in ELIGIBLE_CATEGORIES
- * - Must NOT be in EXCLUDED_CATEGORIES
- * - Fixed rent is handled as a separate fixed commitment outside the flexible budget.
- * - Avoids double-counting credit card settlements, ATM withdrawals, and self-transfers.
+ * Determines whether a transaction is an eligible spending debit.
  */
 export function isEligibleTransaction(txn: Transaction): boolean {
   if (txn.transaction_type !== 'debit') {
     return false;
   }
-  if (EXCLUDED_CATEGORIES.has(txn.main_category)) {
+  if (EXCLUDED_CATEGORIES_SET.has(txn.main_category)) {
     return false;
   }
-  return ELIGIBLE_CATEGORIES.has(txn.main_category);
+  return ELIGIBLE_CATEGORIES_SET.has(txn.main_category);
 }
 
 /**
- * Calculates spending and progress for a single week.
+ * Returns a human-readable explanation for why a transaction was included or excluded.
+ */
+export function getExclusionReason(txn: Transaction): string | null {
+  if (txn.transaction_type !== 'debit') {
+    return 'Excluded: Credit transaction (Income/Inflow), not an expense';
+  }
+  if (txn.main_category === 'Credit Card Payments' || txn.main_category === 'Credit Card Settlements') {
+    return 'Excluded: Credit card bill settlement (prevents double-counting earlier card purchases)';
+  }
+  if (txn.main_category === 'Self Transfers') {
+    return 'Excluded: Internal transfer between accounts or wallet load (not spending)';
+  }
+  if (txn.main_category === 'Cash Withdrawals') {
+    return 'Excluded: ATM cash withdrawal (spending is tracked when cash is spent on purchases)';
+  }
+  if (txn.main_category === 'Investments (Outflow)') {
+    return 'Excluded: Investment outflow (SIP / Mutual Funds / Stocks), not consumption spending';
+  }
+  if (txn.main_category === 'Lend' || txn.main_category === 'Borrow') {
+    return 'Excluded: Temporary peer split/loan, not consumption spending';
+  }
+  if (txn.main_category === 'Friends & Family') {
+    return 'Excluded: Peer money movement, not a merchant purchase';
+  }
+  if (!ELIGIBLE_CATEGORIES_SET.has(txn.main_category)) {
+    return `Excluded: Unrecognized category "${txn.main_category}" outside eligible expense taxonomy`;
+  }
+  return null;
+}
+
+/**
+ * Aggregates eligible transactions into category-wise totals.
+ */
+export function calculateCategoryBreakdown(transactions: Transaction[]): CategorySpend[] {
+  const map = new Map<string, { amount: number; count: number }>();
+  let totalAmount = 0;
+
+  for (const t of transactions) {
+    if (isEligibleTransaction(t)) {
+      const existing = map.get(t.main_category) || { amount: 0, count: 0 };
+      existing.amount += t.amount;
+      existing.count += 1;
+      map.set(t.main_category, existing);
+      totalAmount += t.amount;
+    }
+  }
+
+  const breakdown: CategorySpend[] = [];
+  for (const [category, val] of map.entries()) {
+    const roundedAmt = Math.round(val.amount * 100) / 100;
+    const pct = totalAmount > 0 ? Math.round((roundedAmt / totalAmount) * 1000) / 10 : 0;
+    breakdown.push({
+      category,
+      amount: roundedAmt,
+      percentageOfTotal: pct,
+      transactionCount: val.count,
+    });
+  }
+
+  // Sort by highest amount spent
+  return breakdown.sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * Calculates metrics for a specific week.
+ *
+ * Formulas:
+ * Weekly Difference = Weekly Budget - Total Eligible Weekly Spending
+ * Weekly Percentage = (Weekly Difference / Weekly Budget) * 100
  */
 export function calculateWeek(
   weekIndex: number,
-  weekCode: string,
   startDate: string,
   endDate: string,
   budgetAmount: number,
-  allTransactions: Transaction[],
-  previousCumulativeUnderBudget: number = 0
+  isCompleted: boolean,
+  completedAt: string | undefined,
+  allTransactions: Transaction[]
 ): WeeklyCalculation {
-  // Filter transactions strictly using txn_date (not arrived_at)
+  // Filter transactions using txn_date strictly (not arrived_at)
   const weekTxns = allTransactions.filter(
     (t) => t.txn_date >= startDate && t.txn_date <= endDate
   );
 
   let eligibleSpending = 0;
-  const dailyBreakdown: { [date: string]: number } = {};
-
   for (const t of weekTxns) {
     if (isEligibleTransaction(t)) {
       eligibleSpending += t.amount;
-      dailyBreakdown[t.txn_date] = (dailyBreakdown[t.txn_date] || 0) + t.amount;
     }
   }
 
-  // Round to 2 decimal places to avoid floating point anomalies
   const actualSpending = Math.round(eligibleSpending * 100) / 100;
-  const underBudgetAmount = Math.round((budgetAmount - actualSpending) * 100) / 100;
-  const isWithinBudget = underBudgetAmount >= 0;
+  const remainingBudget = Math.round((budgetAmount - actualSpending) * 100) / 100;
+  const isUnderBudget = remainingBudget >= 0;
 
-  const percentageUnderOrOver =
-    budgetAmount > 0
-      ? Math.round((Math.abs(underBudgetAmount) / budgetAmount) * 1000) / 10
-      : 0;
+  // Spending percentage of limit
+  const spendingPercentage =
+    budgetAmount > 0 ? Math.round((actualSpending / budgetAmount) * 1000) / 10 : 0;
 
-  let achievementStatus = '';
-  let encouragingMessage = '';
+  // Percentage variance under or over budget
+  const diffPct =
+    budgetAmount > 0 ? Math.round((Math.abs(remainingBudget) / budgetAmount) * 100) : 0;
 
-  if (isWithinBudget) {
-    achievementStatus = `${percentageUnderOrOver}% under budget`;
-    if (previousCumulativeUnderBudget < 0 && previousCumulativeUnderBudget + underBudgetAmount >= 0) {
-      encouragingMessage = `You recovered your budget progress this week! Kept ₹${underBudgetAmount.toLocaleString('en-IN')} unspent.`;
-    } else if (underBudgetAmount > 0) {
-      encouragingMessage = `You stayed ₹${underBudgetAmount.toLocaleString('en-IN')} under budget this week! Fantastic discipline.`;
+  let resultStatus: 'win' | 'over' | 'pending' = 'pending';
+  let resultBadgeLabel = 'Pending';
+  let resultMessage = 'Week in progress. Add expenses or click Finish Week to lock your result.';
+
+  if (isCompleted) {
+    if (isUnderBudget) {
+      resultStatus = 'win';
+      resultBadgeLabel = `${diffPct}% Under Budget`;
+      resultMessage = `You stayed ${diffPct}% under budget! You kept ₹${remainingBudget.toLocaleString('en-IN')} unspent.`;
     } else {
-      encouragingMessage = `Spot on! You stayed exactly within your ₹${budgetAmount.toLocaleString('en-IN')} limit.`;
+      resultStatus = 'over';
+      resultBadgeLabel = `${diffPct}% Above Budget`;
+      resultMessage = `You went ${diffPct}% over this week's budget. That's okay. You can start fresh next week.`;
     }
   } else {
-    const overAmount = Math.abs(underBudgetAmount);
-    achievementStatus = `Above budget (+₹${overAmount.toLocaleString('en-IN')})`;
-    encouragingMessage = `Exceeded by ₹${overAmount.toLocaleString('en-IN')}. No stress—your progress isn't wiped out! Adjust your next week to balance out.`;
+    // Current in-progress status preview
+    if (actualSpending === 0) {
+      resultBadgeLabel = 'In Progress';
+      resultMessage = `₹${budgetAmount.toLocaleString('en-IN')} planned for this week. No expenses recorded yet.`;
+    } else if (isUnderBudget) {
+      resultBadgeLabel = `${diffPct}% Under (Live)`;
+      resultMessage = `Currently ₹${remainingBudget.toLocaleString('en-IN')} under budget (${spendingPercentage}% spent).`;
+    } else {
+      resultBadgeLabel = `${diffPct}% Over (Live)`;
+      resultMessage = `Currently ₹${Math.abs(remainingBudget).toLocaleString('en-IN')} over budget. Pace remaining days.`;
+    }
   }
+
+  const categoryBreakdown = calculateCategoryBreakdown(weekTxns);
 
   return {
     weekIndex,
-    weekCode,
+    weekCode: `W${weekIndex}`,
     weekLabel: `Week ${weekIndex}`,
     startDate,
     endDate,
     budgetAmount,
     actualSpending,
-    underBudgetAmount,
-    percentageUnderOrOver,
-    status: isWithinBudget ? 'within_budget' : 'above_budget',
-    achievementStatus,
-    encouragingMessage,
+    remainingBudget,
+    spendingPercentage,
+    differencePercentage: diffPct,
+    isUnderBudget,
+    isCompleted,
+    completedAt,
+    resultStatus,
+    resultBadgeLabel,
+    resultMessage,
+    categoryBreakdown,
     transactions: weekTxns,
-    dailyBreakdown,
   };
 }
 
 /**
- * Calculates complete monthly progress, cumulative tracking, and recovery milestones.
+ * Calculates overall monthly results from actual transactions across the month.
+ *
+ * Formulas:
+ * Monthly Difference = Monthly Budget - Total Monthly Eligible Spending
+ * Monthly Percentage = (Monthly Difference / Monthly Budget) * 100
  */
-export function calculateMonthlyProgress(
-  profile: UserFinancialProfile,
-  budgets: Budget[],
-  transactions: Transaction[]
+export function calculateMonthly(
+  monthlyBudget: number,
+  weeklyBudgets: Budget[],
+  transactions: Transaction[],
+  completedWeeksSet: Set<number> = new Set()
 ): MonthlyCalculation {
-  const monthlyAllowance = profile.monthly_allowance;
-  const fixedRent = profile.fixed_rent;
-  const monthlySavingsTarget = profile.monthly_savings_target;
-  const flexibleMonthlyPool = monthlyAllowance - fixedRent;
-
-  // Sort budgets by date
-  const sortedBudgets = [...budgets].sort((a, b) => a.from_date.localeCompare(b.from_date));
-
-  // Sort transactions by date and time
-  const sortedTxns = [...transactions].sort((a, b) => {
-    const dComp = a.txn_date.localeCompare(b.txn_date);
-    return dComp !== 0 ? dComp : a.txn_time.localeCompare(b.txn_time);
+  // Sort weekly budgets by week index or start date
+  const sortedWeeklyBudgets = [...weeklyBudgets].sort((a, b) => {
+    if (a.week_index && b.week_index) return a.week_index - b.week_index;
+    return a.from_date.localeCompare(b.from_date);
   });
 
-  const weeklyCalculations: WeeklyCalculation[] = [];
-  const cumulativeTimeline: CumulativePoint[] = [];
-
-  let runningCumulativeBudget = 0;
-  let runningCumulativeSpent = 0;
+  const weeks: WeeklyCalculation[] = [];
+  let totalWeeklyBudgets = 0;
   let weeklyWinsCount = 0;
-  let hadPriorOverspend = false;
-  let recoveryOccurred = false;
+  let completedWeeksCount = 0;
 
-  for (let i = 0; i < sortedBudgets.length; i++) {
-    const b = sortedBudgets[i];
-    const prevCumulativeUnderBudget = runningCumulativeBudget - runningCumulativeSpent;
+  for (let i = 0; i < sortedWeeklyBudgets.length; i++) {
+    const b = sortedWeeklyBudgets[i];
+    const weekIdx = b.week_index || i + 1;
+    const isCompleted = b.is_completed ?? completedWeeksSet.has(weekIdx);
 
     const weekCalc = calculateWeek(
-      i + 1,
-      `W${i + 1}`,
+      weekIdx,
       b.from_date,
       b.to_date,
       b.amount,
-      sortedTxns,
-      prevCumulativeUnderBudget
+      isCompleted,
+      b.completed_at,
+      transactions
     );
 
-    weeklyCalculations.push(weekCalc);
+    weeks.push(weekCalc);
+    totalWeeklyBudgets += b.amount;
 
-    if (weekCalc.status === 'within_budget') {
-      weeklyWinsCount += 1;
-    } else {
-      hadPriorOverspend = true;
+    if (isCompleted) {
+      completedWeeksCount += 1;
+      if (weekCalc.isUnderBudget) {
+        weeklyWinsCount += 1;
+      }
     }
-
-    runningCumulativeBudget += weekCalc.budgetAmount;
-    runningCumulativeSpent += weekCalc.actualSpending;
-
-    const currentCumulativeUnderBudget =
-      Math.round((runningCumulativeBudget - runningCumulativeSpent) * 100) / 100;
-
-    const cumulativePerfPct =
-      runningCumulativeBudget > 0
-        ? Math.round((currentCumulativeUnderBudget / runningCumulativeBudget) * 1000) / 10
-        : 0;
-
-    let recoveredThisWeek = false;
-    // If there was an overspend in a previous week and this week is within budget, recovery happened
-    if (hadPriorOverspend && weekCalc.status === 'within_budget' && i > 0) {
-      recoveredThisWeek = true;
-      recoveryOccurred = true;
-    }
-
-    cumulativeTimeline.push({
-      weekIndex: i + 1,
-      weekCode: `W${i + 1}`,
-      weekLabel: `Week ${i + 1}`,
-      cumulativeBudget: runningCumulativeBudget,
-      cumulativeSpent: runningCumulativeSpent,
-      cumulativeUnderBudget: currentCumulativeUnderBudget,
-      cumulativePerformancePct: cumulativePerfPct,
-      recoveredThisWeek,
-      status: currentCumulativeUnderBudget >= 0 ? 'within_budget' : 'above_budget',
-    });
   }
 
-  const totalPlannedWeeklyBudget = runningCumulativeBudget;
-  const totalActualEligibleSpending = runningCumulativeSpent;
-
-  // Calculate excluded spending (Rent, settlements, etc.)
+  // Calculate actual total eligible spending across ALL transactions belonging to the budget dates
+  let totalEligibleSpending = 0;
   let totalExcludedSpending = 0;
-  for (const t of sortedTxns) {
-    if (!isEligibleTransaction(t) && t.transaction_type === 'debit') {
+
+  for (const t of transactions) {
+    if (isEligibleTransaction(t)) {
+      totalEligibleSpending += t.amount;
+    } else if (t.transaction_type === 'debit') {
       totalExcludedSpending += t.amount;
     }
   }
 
-  // Monthly under-budget amount = Total planned budget - Total actual eligible spending
-  const monthlyUnderBudgetAmount =
-    Math.round((totalPlannedWeeklyBudget - totalActualEligibleSpending) * 100) / 100;
+  totalEligibleSpending = Math.round(totalEligibleSpending * 100) / 100;
+  totalExcludedSpending = Math.round(totalExcludedSpending * 100) / 100;
 
-  // Monthly performance percentage = (Monthly under-budget amount / Total planned budget) * 100
-  const monthlyPerformancePercentage =
-    totalPlannedWeeklyBudget > 0
-      ? Math.round((monthlyUnderBudgetAmount / totalPlannedWeeklyBudget) * 1000) / 10
-      : 0;
+  // Monthly Difference = Monthly Budget - Total Monthly Eligible Spending
+  const monthlyDifference = Math.round((monthlyBudget - totalEligibleSpending) * 100) / 100;
+  const isUnderBudget = monthlyDifference >= 0;
 
-  const unallocatedPool = Math.max(
-    0,
-    flexibleMonthlyPool - totalPlannedWeeklyBudget - monthlySavingsTarget
-  );
+  // Monthly Percentage = (Monthly Difference / Monthly Budget) * 100
+  const monthlyPercentage =
+    monthlyBudget > 0 ? Math.round((Math.abs(monthlyDifference) / monthlyBudget) * 100) : 0;
 
-  // Dynamic empathetic headline & messages
+  const unallocatedMonthlyBudget = Math.max(0, monthlyBudget - totalWeeklyBudgets);
+  const allWeeksCompleted = completedWeeksCount === sortedWeeklyBudgets.length && sortedWeeklyBudgets.length > 0;
+
+  let statusLabel = '';
   let headlineMessage = '';
-  let encouragingMessage = '';
+  let resultMessage = '';
 
-  if (weeklyWinsCount === sortedBudgets.length) {
-    headlineMessage = `Flawless Month! ${weeklyWinsCount} out of ${sortedBudgets.length} Weekly Wins`;
-    encouragingMessage = `You finished the month ₹${monthlyUnderBudgetAmount.toLocaleString('en-IN')} under budget! Phenomenal financial discipline.`;
-  } else if (recoveryOccurred && monthlyUnderBudgetAmount >= 0) {
-    headlineMessage = `Great Recovery! Finished ₹${monthlyUnderBudgetAmount.toLocaleString('en-IN')} Under Budget`;
-    encouragingMessage = `You recovered your budget progress after week 2 and protected your month! Total unspent planned budget: ₹${monthlyUnderBudgetAmount.toLocaleString('en-IN')}.`;
-  } else if (monthlyUnderBudgetAmount >= 0) {
-    headlineMessage = `${weeklyWinsCount} Weeks of Mindful Spending`;
-    encouragingMessage = `You finished the month ₹${monthlyUnderBudgetAmount.toLocaleString('en-IN')} under budget (${monthlyPerformancePercentage}% under planned limit).`;
+  if (allWeeksCompleted) {
+    statusLabel = 'Final Monthly Result';
+    if (isUnderBudget) {
+      headlineMessage = `You finished the month ${monthlyPercentage}% under budget!`;
+      resultMessage = `All ${completedWeeksCount} weeks completed with ${weeklyWinsCount} weekly wins. Total unspent budget: ₹${monthlyDifference.toLocaleString('en-IN')}.`;
+    } else {
+      const overAmt = Math.abs(monthlyDifference);
+      headlineMessage = `You finished the month ${monthlyPercentage}% above budget`;
+      resultMessage = `All ${completedWeeksCount} weeks completed with ${weeklyWinsCount} weekly wins. Total overspending: ₹${overAmt.toLocaleString('en-IN')}.`;
+    }
   } else {
-    const overAmt = Math.abs(monthlyUnderBudgetAmount);
-    headlineMessage = `Month Complete: ₹${overAmt.toLocaleString('en-IN')} Above Planned Budget`;
-    encouragingMessage = `College life happens! Reflect on the unexpected spikes and use next month's fresh flexible pool to rebalance.`;
+    statusLabel = 'Month-to-Date (Provisional)';
+    if (isUnderBudget) {
+      headlineMessage = `Currently ${monthlyPercentage}% under budget month-to-date`;
+      resultMessage = `${completedWeeksCount} of ${sortedWeeklyBudgets.length} weeks finished (${weeklyWinsCount} wins). Current unspent budget: ₹${monthlyDifference.toLocaleString('en-IN')}.`;
+    } else {
+      const overAmt = Math.abs(monthlyDifference);
+      headlineMessage = `Currently ${monthlyPercentage}% above budget month-to-date`;
+      resultMessage = `${completedWeeksCount} of ${sortedWeeklyBudgets.length} weeks finished. Current overage: ₹${overAmt.toLocaleString('en-IN')}.`;
+    }
   }
 
+  const categoryBreakdown = calculateCategoryBreakdown(transactions);
+
   return {
-    monthlyAllowance,
-    fixedRent,
-    flexibleMonthlyPool,
-    totalPlannedWeeklyBudget,
-    monthlySavingsTarget,
-    unallocatedPool,
-    totalActualEligibleSpending,
+    monthlyBudget,
+    totalWeeklyBudgets,
+    unallocatedMonthlyBudget,
+    totalEligibleSpending,
     totalExcludedSpending,
-    monthlyUnderBudgetAmount,
-    monthlyPerformancePercentage,
+    monthlyDifference,
+    monthlyPercentage,
+    isUnderBudget,
+    allWeeksCompleted,
+    completedWeeksCount,
     weeklyWinsCount,
-    totalWeeks: sortedBudgets.length,
+    statusLabel,
     headlineMessage,
-    encouragingMessage,
-    recoveryOccurred,
-    cumulativeTimeline,
-    weeklyCalculations,
+    resultMessage,
+    weeks,
+    categoryBreakdown,
   };
 }

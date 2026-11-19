@@ -1,269 +1,182 @@
 import React, { useState, useMemo } from 'react';
 import initialData from './data/mockData.json';
-import { User, Transaction, Budget, UserFinancialProfile } from './types';
-import { calculateMonthlyProgress } from './services/budgetCalculator';
-import { Navbar } from './components/Navbar';
-import { MonthlyMoneyPlan } from './components/MonthlyMoneyPlan';
-import { WeeklyWinsCalendar } from './components/WeeklyWinsCalendar';
+import { Budget, Transaction } from './types';
+import { calculateMonthly } from './services/budgetCalculator';
+import { Header } from './components/Header';
+import { MonthlyOverview } from './components/MonthlyOverview';
+import { WeeklyWinsStrip } from './components/WeeklyWinsStrip';
 import { WeeklyTracker } from './components/WeeklyTracker';
-import { MonthlyProgress } from './components/MonthlyProgress';
-import { TransactionBreakdown } from './components/TransactionBreakdown';
-import { AddTransactionModal } from './components/AddTransactionModal';
-import { EditPlanModal } from './components/EditPlanModal';
-import { RulesExplainerModal } from './components/RulesExplainerModal';
+import { MonthlyResultCard } from './components/MonthlyResultCard';
+import { BudgetSetupModal } from './components/BudgetSetupModal';
+import { AddExpenseModal } from './components/AddExpenseModal';
+import { RulesModal } from './components/RulesModal';
 
 export const App: React.FC = () => {
-  // State for all users and their editable transactions and profiles
-  const [usersState, setUsersState] = useState<User[]>(initialData.users as unknown as User[]);
-  const [currentUserId, setCurrentUserId] = useState<string>('usr_aarav_01');
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
+  // State: User-controlled budgets and transactions
+  const [monthlyBudget, setMonthlyBudget] = useState<number>(initialData.monthly_budget);
+  const [weeklyBudgets, setWeeklyBudgets] = useState<Budget[]>(
+    initialData.weekly_budgets as unknown as Budget[]
+  );
+  const [transactions, setTransactions] = useState<Transaction[]>(
+    initialData.transactions as unknown as Transaction[]
+  );
 
-  // View state
-  const [isMobileFrame, setIsMobileFrame] = useState<boolean>(false);
+  // Active selected week (1..4)
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number>(2);
 
   // Modals state
-  const [isAddTxnOpen, setIsAddTxnOpen] = useState<boolean>(false);
-  const [isEditPlanOpen, setIsEditPlanOpen] = useState<boolean>(false);
+  const [isBudgetSetupOpen, setIsBudgetSetupOpen] = useState<boolean>(false);
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState<boolean>(false);
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
 
-  // Find active user
-  const currentUser = useMemo(() => {
-    return usersState.find((u) => u.user_id === currentUserId) || usersState[0];
-  }, [usersState, currentUserId]);
-
-  // Dynamic monthly calculation engine execution
+  // Monthly calculation engine execution
   const monthlyCalc = useMemo(() => {
-    return calculateMonthlyProgress(
-      currentUser.profile,
-      currentUser.budgets,
-      currentUser.transactions
+    return calculateMonthly(monthlyBudget, weeklyBudgets, transactions);
+  }, [monthlyBudget, weeklyBudgets, transactions]);
+
+  // Active week object
+  const activeWeek = useMemo(() => {
+    return (
+      monthlyCalc.weeks.find((w) => w.weekIndex === selectedWeekIndex) ||
+      monthlyCalc.weeks[0]
     );
-  }, [currentUser]);
+  }, [monthlyCalc.weeks, selectedWeekIndex]);
 
   // Handlers
-  const handleSelectUser = (userId: string) => {
-    setCurrentUserId(userId);
-    setSelectedWeekIndex(null);
+  const handleFinishWeek = (weekIndex: number) => {
+    setWeeklyBudgets((prev) =>
+      prev.map((b) => {
+        if (b.week_index === weekIndex) {
+          if (b.is_completed) return b; // Prevent duplicate clicks
+          return {
+            ...b,
+            is_completed: true,
+            completed_at: new Date().toISOString(),
+          };
+        }
+        return b;
+      })
+    );
+  };
+
+  const handleReopenWeek = (weekIndex: number) => {
+    setWeeklyBudgets((prev) =>
+      prev.map((b) => {
+        if (b.week_index === weekIndex) {
+          return {
+            ...b,
+            is_completed: false,
+            completed_at: undefined,
+          };
+        }
+        return b;
+      })
+    );
   };
 
   const handleAddTransaction = (newTxn: Transaction) => {
-    setUsersState((prev) =>
-      prev.map((u) => {
-        if (u.user_id === currentUserId) {
-          return {
-            ...u,
-            transactions: [newTxn, ...u.transactions],
-          };
-        }
-        return u;
-      })
-    );
+    setTransactions((prev) => [newTxn, ...prev]);
   };
 
-  const handleSavePlan = (
-    updatedProfile: UserFinancialProfile,
-    updatedBudgets: Budget[]
-  ) => {
-    setUsersState((prev) =>
-      prev.map((u) => {
-        if (u.user_id === currentUserId) {
-          return {
-            ...u,
-            profile: updatedProfile,
-            budgets: updatedBudgets,
-          };
-        }
-        return u;
-      })
-    );
+  const handleAddQuickExpense = (sample: { amount: number; category: string; merchant: string }) => {
+    const newTxn: Transaction = {
+      txn_id: `quick_${Date.now()}`,
+      user_id: 'user_demo',
+      txn_date: activeWeek.startDate,
+      txn_time: new Date().toTimeString().split(' ')[0],
+      amount: sample.amount,
+      transaction_type: 'debit',
+      payment_mode: 'UPI',
+      main_category: sample.category,
+      merchant_name: sample.merchant,
+      source: 'Quick Sample',
+      arrived_at: new Date().toISOString(),
+    };
+    handleAddTransaction(newTxn);
   };
 
-  const handleResetData = () => {
-    setUsersState(initialData.users as unknown as User[]);
-    setSelectedWeekIndex(null);
+  const handleSaveBudgets = (newMonthly: number, newWeekly: Budget[]) => {
+    setMonthlyBudget(newMonthly);
+    setWeeklyBudgets(newWeekly);
+  };
+
+  const handleResetDemo = () => {
+    setMonthlyBudget(initialData.monthly_budget);
+    setWeeklyBudgets(initialData.weekly_budgets as unknown as Budget[]);
+    setTransactions(initialData.transactions as unknown as Transaction[]);
+    setSelectedWeekIndex(2);
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans">
-      {/* Top Navigation */}
-      <Navbar
-        users={usersState}
-        currentUser={currentUser}
-        onSelectUser={handleSelectUser}
-        isMobileFrame={isMobileFrame}
-        onToggleMobileFrame={() => setIsMobileFrame(!isMobileFrame)}
-        onOpenAddTxn={() => setIsAddTxnOpen(true)}
-        onOpenEditPlan={() => setIsEditPlanOpen(true)}
+      {/* Top Header */}
+      <Header
+        onOpenBudgetSetup={() => setIsBudgetSetupOpen(true)}
+        onOpenAddExpense={() => setIsAddExpenseOpen(true)}
         onOpenRules={() => setIsRulesOpen(true)}
-        onResetData={handleResetData}
+        onResetDemo={handleResetDemo}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
-        {/* If Mobile Frame Mode is enabled */}
-        {isMobileFrame ? (
-          <div className="flex flex-col items-center justify-center my-4">
-            <div className="mb-3 text-xs text-slate-500 font-medium">
-              📱 Mobile Device Simulation Mode (390px × 844px)
-            </div>
-            {/* Phone Frame */}
-            <div className="w-[395px] min-h-[820px] bg-slate-900 rounded-[50px] p-3 shadow-2xl ring-8 ring-slate-800/80 relative">
-              {/* Dynamic Island Notch */}
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-6 bg-black rounded-full z-40 flex items-center justify-center">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-800 mr-2" />
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              </div>
+      {/* Main Experience: Set Budget -> Track Expenses -> Finish Week -> See Result */}
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {/* 1. Monthly Budget & Progress Overview */}
+        <MonthlyOverview
+          monthlyCalc={monthlyCalc}
+          onOpenBudgetSetup={() => setIsBudgetSetupOpen(true)}
+        />
 
-              {/* Inner Phone Screen */}
-              <div className="w-full h-full bg-[#F8FAFC] rounded-[40px] pt-10 pb-6 px-3.5 overflow-y-auto max-h-[790px] space-y-4">
-                <MonthlyMoneyPlan
-                  profile={currentUser.profile}
-                  monthlyCalc={monthlyCalc}
-                  onEditPlan={() => setIsEditPlanOpen(true)}
-                />
+        {/* 2. Compact 4-Week Wins Strip */}
+        <WeeklyWinsStrip
+          weeks={monthlyCalc.weeks}
+          selectedWeekIndex={selectedWeekIndex}
+          onSelectWeek={setSelectedWeekIndex}
+        />
 
-                <WeeklyWinsCalendar
-                  weeks={monthlyCalc.weeklyCalculations}
-                  selectedWeekIndex={selectedWeekIndex}
-                  onSelectWeek={setSelectedWeekIndex}
-                  appActivityDates={currentUser.app_activity}
-                />
+        {/* 3. The Core Feature: Weekly Tracker with Category Spending, Finish Week Button & Expenses */}
+        <WeeklyTracker
+          activeWeek={activeWeek}
+          onFinishWeek={handleFinishWeek}
+          onReopenWeek={handleReopenWeek}
+          onOpenAddExpense={() => setIsAddExpenseOpen(true)}
+          onAddQuickExpense={handleAddQuickExpense}
+        />
 
-                <MonthlyProgress
-                  monthlyCalc={monthlyCalc}
-                  onOpenRules={() => setIsRulesOpen(true)}
-                />
-
-                <WeeklyTracker
-                  weeks={monthlyCalc.weeklyCalculations}
-                  selectedWeekIndex={selectedWeekIndex}
-                  onSelectWeek={setSelectedWeekIndex}
-                />
-
-                <TransactionBreakdown
-                  transactions={currentUser.transactions}
-                  weeks={monthlyCalc.weeklyCalculations}
-                  selectedWeekIndex={selectedWeekIndex}
-                  onSelectWeek={setSelectedWeekIndex}
-                  onOpenAddTxn={() => setIsAddTxnOpen(true)}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Responsive Desktop & Tablet Dashboard Layout */
-          <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
-            {/* Persona Hero Callout */}
-            <div className="bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white p-4 sm:p-5 rounded-2xl border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl overflow-hidden bg-emerald-200 border-2 border-emerald-400 flex items-center justify-center text-sm font-extrabold text-emerald-900 shadow-sm flex-shrink-0">
-                  {currentUser.profile.avatar ? (
-                    <img
-                      src={currentUser.profile.avatar}
-                      alt={currentUser.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    currentUser.name[0]
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-base sm:text-lg font-black text-slate-900">
-                      {currentUser.name}
-                    </h1>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                      {currentUser.city}
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                    {currentUser.profile.tagline || currentUser.profile.living_arrangement}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-auto text-xs font-semibold text-emerald-800 bg-white/80 px-3 py-1.5 rounded-xl border border-emerald-200">
-                <span>Monthly Allowance: ₹{currentUser.profile.monthly_allowance.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            {/* 1. Monthly Money Plan (Section A) */}
-            <MonthlyMoneyPlan
-              profile={currentUser.profile}
-              monthlyCalc={monthlyCalc}
-              onEditPlan={() => setIsEditPlanOpen(true)}
-            />
-
-            {/* 2. Monthly Cumulative Progress (Section D - The Most Important Feature) */}
-            <MonthlyProgress
-              monthlyCalc={monthlyCalc}
-              onOpenRules={() => setIsRulesOpen(true)}
-            />
-
-            {/* Two-Column Grid: Weekly Wins Calendar & Weekly Spending Tracker */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
-              {/* Left Column: Weekly Wins Calendar (Section C) */}
-              <div className="lg:col-span-12 xl:col-span-5">
-                <WeeklyWinsCalendar
-                  weeks={monthlyCalc.weeklyCalculations}
-                  selectedWeekIndex={selectedWeekIndex}
-                  onSelectWeek={setSelectedWeekIndex}
-                  appActivityDates={currentUser.app_activity}
-                />
-              </div>
-
-              {/* Right Column: Weekly Spending Tracker (Section B) */}
-              <div className="lg:col-span-12 xl:col-span-7">
-                <WeeklyTracker
-                  weeks={monthlyCalc.weeklyCalculations}
-                  selectedWeekIndex={selectedWeekIndex}
-                  onSelectWeek={setSelectedWeekIndex}
-                />
-              </div>
-            </div>
-
-            {/* 5. Transaction Breakdown (Section 4) */}
-            <TransactionBreakdown
-              transactions={currentUser.transactions}
-              weeks={monthlyCalc.weeklyCalculations}
-              selectedWeekIndex={selectedWeekIndex}
-              onSelectWeek={setSelectedWeekIndex}
-              onOpenAddTxn={() => setIsAddTxnOpen(true)}
-            />
-          </div>
-        )}
+        {/* 4. Overall Monthly Results & Week-by-Week Audit Table */}
+        <MonthlyResultCard
+          monthlyCalc={monthlyCalc}
+          onSelectWeek={setSelectedWeekIndex}
+        />
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 px-4 sm:px-8 mt-12 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className="bg-white border-t border-slate-200 py-6 px-4 text-center text-xs text-slate-500">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-slate-800">Nance</span>
             <span>•</span>
-            <span>Weekly Wins for Indian College Students</span>
+            <span>Weekly Wins Budgeting Habit Demo</span>
           </div>
-          <div>
-            Small weekly wins. Better money habits.
-          </div>
+          <div>Small weekly wins. Better money habits.</div>
         </div>
       </footer>
 
       {/* Modals */}
-      <AddTransactionModal
-        isOpen={isAddTxnOpen}
-        onClose={() => setIsAddTxnOpen(false)}
+      <BudgetSetupModal
+        isOpen={isBudgetSetupOpen}
+        onClose={() => setIsBudgetSetupOpen(false)}
+        monthlyBudget={monthlyBudget}
+        weeklyBudgets={weeklyBudgets}
+        onSaveBudgets={handleSaveBudgets}
+      />
+
+      <AddExpenseModal
+        isOpen={isAddExpenseOpen}
+        onClose={() => setIsAddExpenseOpen(false)}
+        defaultDate={activeWeek.startDate}
         onAddTransaction={handleAddTransaction}
       />
 
-      <EditPlanModal
-        isOpen={isEditPlanOpen}
-        onClose={() => setIsEditPlanOpen(false)}
-        profile={currentUser.profile}
-        budgets={currentUser.budgets}
-        onSavePlan={handleSavePlan}
-      />
-
-      <RulesExplainerModal
+      <RulesModal
         isOpen={isRulesOpen}
         onClose={() => setIsRulesOpen(false)}
       />
