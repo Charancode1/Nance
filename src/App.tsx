@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import initialData from './data/mockData.json';
 import { Budget, Transaction, WeeklyCalculation } from './types';
 import { calculateMonthly } from './services/budgetCalculator';
@@ -10,18 +10,73 @@ import { MonthCompletionModal } from './components/MonthCompletionModal';
 import { RulesModal } from './components/RulesModal';
 import { RotateCcw, HelpCircle, Sparkles } from 'lucide-react';
 
-export const App: React.FC = () => {
-  // State: User-controlled budgets and transactions
-  const [monthlyBudget, setMonthlyBudget] = useState<number>(initialData.monthly_budget);
-  const [weeklyBudgets, setWeeklyBudgets] = useState<Budget[]>(
-    initialData.weekly_budgets as unknown as Budget[]
-  );
-  const [transactions, setTransactions] = useState<Transaction[]>(
-    initialData.transactions as unknown as Transaction[]
-  );
+const STORAGE_KEY = 'nance_weekly_wins_data';
 
-  // Active selected week (1..4)
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number>(2);
+export const App: React.FC = () => {
+  // State with localStorage persistence across page refreshes
+  const [monthlyBudget, setMonthlyBudget] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.monthlyBudget === 'number') return parsed.monthlyBudget;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return initialData.monthly_budget;
+  });
+
+  const [weeklyBudgets, setWeeklyBudgets] = useState<Budget[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.weeklyBudgets)) return parsed.weeklyBudgets;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return initialData.weekly_budgets as unknown as Budget[];
+  });
+
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.transactions)) return parsed.transactions;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return initialData.transactions as unknown as Transaction[];
+  });
+
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.selectedWeekIndex === 'number') return parsed.selectedWeekIndex;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return 2;
+  });
+
+  // Persist state changes to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ monthlyBudget, weeklyBudgets, transactions, selectedWeekIndex })
+      );
+    } catch {
+      // Ignore storage errors
+    }
+  }, [monthlyBudget, weeklyBudgets, transactions, selectedWeekIndex]);
 
   // Modals state
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState<boolean>(false);
@@ -42,38 +97,42 @@ export const App: React.FC = () => {
     );
   }, [monthlyCalc.weeks, selectedWeekIndex]);
 
-  // Finish Week Handler (Section 5)
+  // Finish Week Handler (Section 1, 2, 3, 4)
   const handleFinishWeek = (weekIndex: number) => {
-    let completedWeekObj: WeeklyCalculation | null = null;
-
-    setWeeklyBudgets((prev) => {
-      const nextBudgets = prev.map((b) => {
-        if (b.week_index === weekIndex) {
-          return {
-            ...b,
-            is_completed: true,
-            completed_at: new Date().toISOString(),
-          };
-        }
-        return b;
-      });
-
-      // Recalculate with updated budgets to get exact result
-      const updatedMonthly = calculateMonthly(monthlyBudget, nextBudgets, transactions);
-      const finished = updatedMonthly.weeks.find((w) => w.weekIndex === weekIndex) || null;
-      completedWeekObj = finished;
-
-      // Check if all 4 weeks are now completed
-      if (updatedMonthly.allWeeksCompleted) {
-        setTimeout(() => setShowMonthCompletion(true), 600);
+    const nextBudgets = weeklyBudgets.map((b) => {
+      if (b.week_index === weekIndex) {
+        if (b.is_completed) return b; // Prevent duplicate clicks
+        return {
+          ...b,
+          is_completed: true,
+          completed_at: new Date().toISOString(),
+        };
       }
-
-      return nextBudgets;
+      return b;
     });
 
-    if (completedWeekObj) {
-      setJustFinishedWeek(completedWeekObj);
+    setWeeklyBudgets(nextBudgets);
+
+    // Calculate updated week and monthly results
+    const updatedMonthly = calculateMonthly(monthlyBudget, nextBudgets, transactions);
+    const finishedWeekCalc = updatedMonthly.weeks.find((w) => w.weekIndex === weekIndex);
+
+    // Scenario C: If Week 4 completed (or all 4 weeks completed), show final monthly completion directly
+    if (weekIndex === 4 || updatedMonthly.allWeeksCompleted) {
+      setJustFinishedWeek(null);
+      setShowMonthCompletion(true);
+    } else if (finishedWeekCalc) {
+      // Scenario A & B: For Week 1, 2, 3, show the weekly result modal immediately!
+      setJustFinishedWeek(finishedWeekCalc);
+      setShowMonthCompletion(false);
     }
+  };
+
+  const handleNextWeek = () => {
+    if (justFinishedWeek && justFinishedWeek.weekIndex < 4) {
+      setSelectedWeekIndex(justFinishedWeek.weekIndex + 1);
+    }
+    setJustFinishedWeek(null);
   };
 
   const handleReopenWeek = (weekIndex: number) => {
@@ -113,6 +172,11 @@ export const App: React.FC = () => {
   };
 
   const handleResetDemo = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
     setMonthlyBudget(initialData.monthly_budget);
     setWeeklyBudgets(initialData.weekly_budgets as unknown as Budget[]);
     setTransactions(initialData.transactions as unknown as Transaction[]);
@@ -122,14 +186,12 @@ export const App: React.FC = () => {
   };
 
   const handleStartNewMonth = () => {
-    // Starts a fresh month with uncompleted weeks
-    setWeeklyBudgets((prev) =>
-      prev.map((b) => ({
-        ...b,
-        is_completed: false,
-        completed_at: undefined,
-      }))
-    );
+    const freshBudgets = weeklyBudgets.map((b) => ({
+      ...b,
+      is_completed: false,
+      completed_at: undefined,
+    }));
+    setWeeklyBudgets(freshBudgets);
     setTransactions([]);
     setSelectedWeekIndex(1);
     setShowMonthCompletion(false);
@@ -139,7 +201,7 @@ export const App: React.FC = () => {
     <div className="min-h-screen bg-slate-900/10 flex justify-center py-0 sm:py-6 px-0 sm:px-4 font-sans antialiased">
       {/* Mobile-First Centered Container */}
       <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-[800px] sm:rounded-[36px] shadow-2xl border-x sm:border border-slate-200/90 flex flex-col overflow-hidden relative">
-        {/* 1. Top Header: Nance Weekly Wins */}
+        {/* 1. Header: Nance Weekly Wins */}
         <header className="px-4 py-3 bg-white/95 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-xs">
@@ -159,16 +221,18 @@ export const App: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsRulesOpen(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               title="How calculations work"
+              aria-label="How calculations work"
             >
               <HelpCircle className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={handleResetDemo}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               title="Reset Demo"
+              aria-label="Reset Demo"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -177,7 +241,7 @@ export const App: React.FC = () => {
 
         {/* Mobile Main Body */}
         <main className="flex-1 p-3.5 sm:p-4 space-y-3.5 overflow-y-auto">
-          {/* 2. Four Weekly Boxes: W1, W2, W3, W4 */}
+          {/* 2. Four Weekly Boxes at the Top: W1, W2, W3, W4 */}
           <MobileTopBoxes
             weeks={monthlyCalc.weeks}
             selectedWeekIndex={selectedWeekIndex}
@@ -209,19 +273,18 @@ export const App: React.FC = () => {
         onAddTransaction={handleAddTransaction}
       />
 
+      {/* Weekly Completion Result Modal (Scenario A & B: Weeks 1, 2, 3) */}
       {justFinishedWeek && (
         <WeekResultModal
           isOpen={Boolean(justFinishedWeek)}
           onClose={() => setJustFinishedWeek(null)}
           week={justFinishedWeek}
           hasNextWeek={justFinishedWeek.weekIndex < 4}
-          onNextWeek={() => {
-            setSelectedWeekIndex(justFinishedWeek.weekIndex + 1);
-            setJustFinishedWeek(null);
-          }}
+          onNextWeek={handleNextWeek}
         />
       )}
 
+      {/* Monthly Completion Celebration Modal (Scenario C: Week 4 / All 4 Weeks Finished) */}
       <MonthCompletionModal
         isOpen={showMonthCompletion}
         onClose={() => setShowMonthCompletion(false)}
