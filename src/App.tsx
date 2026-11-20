@@ -3,7 +3,6 @@ import initialData from './data/mockData.json';
 import { Budget, Transaction, WeeklyCalculation } from './types';
 import { calculateMonthly } from './services/budgetCalculator';
 import { MobileTopBoxes } from './components/MobileTopBoxes';
-import { MobileMonthlyProgress } from './components/MobileMonthlyProgress';
 import { MobileWeeklyTracker } from './components/MobileWeeklyTracker';
 import { AddExpenseModal } from './components/AddExpenseModal';
 import { WeekResultModal } from './components/WeekResultModal';
@@ -139,8 +138,8 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900/10 flex justify-center py-0 sm:py-6 px-0 sm:px-4 font-sans antialiased">
       {/* Mobile-First Centered Container */}
-      <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-[820px] sm:rounded-[36px] shadow-2xl border-x sm:border border-slate-200/90 flex flex-col overflow-hidden relative">
-        {/* Top App Bar */}
+      <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-[800px] sm:rounded-[36px] shadow-2xl border-x sm:border border-slate-200/90 flex flex-col overflow-hidden relative">
+        {/* 1. Top Header: Nance Weekly Wins */}
         <header className="px-4 py-3 bg-white/95 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-xs">
@@ -178,17 +177,20 @@ export const App: React.FC = () => {
 
         {/* Mobile Main Body */}
         <main className="flex-1 p-3.5 sm:p-4 space-y-3.5 overflow-y-auto">
-          {/* 1. Four Weekly Boxes at the Top (Section 2) */}
+          {/* 2. Four Weekly Boxes: W1, W2, W3, W4 */}
           <MobileTopBoxes
             weeks={monthlyCalc.weeks}
             selectedWeekIndex={selectedWeekIndex}
             onSelectWeek={setSelectedWeekIndex}
           />
 
-          {/* 2. Monthly Progress: Percentage First (Section 3) */}
-          <MobileMonthlyProgress monthlyCalc={monthlyCalc} />
-
-          {/* 3. Selected Week: Simple Expense Tracker & Finish Week (Section 4 & 5) */}
+          {/* 3 to 8. Selected Week Tracker:
+              - Week number and date range
+              - Weekly budget summary (budget, spent, remaining)
+              - Category spending two-column percentage cards
+              - Quick demo expenses
+              - Add expense button
+              - Finish week prominent button */}
           <MobileWeeklyTracker
             activeWeek={activeWeek}
             onFinishWeek={handleFinishWeek}

@@ -36,7 +36,6 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
     isUnderBudget,
     isCompleted,
     categoryBreakdown,
-    transactions,
   } = activeWeek;
 
   const quickSamples = [
@@ -48,7 +47,7 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
 
   return (
     <section className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-subtle text-left space-y-4">
-      {/* Header: Week Title and Date Range */}
+      {/* 3. Selected Week Tracker: Week Number & Date Range */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-100">
         <div>
           <h3 className="text-lg font-black text-slate-900">{weekLabel} Tracker</h3>
@@ -76,7 +75,7 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
         )}
       </div>
 
-      {/* 3 Core Numbers Row */}
+      {/* 4. Weekly Budget Summary: Budget, Spent, Remaining */}
       <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/70 text-center">
         <div>
           <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
@@ -112,9 +111,9 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
         </div>
       </div>
 
-      {/* Category-Wise Expense Breakdown */}
+      {/* 5. Category Spending: Compact Two-Column Percentage Cards Grid */}
       <div>
-        <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+        <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2.5">
           <span className="flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-slate-500" />
             <span>Category Spending</span>
@@ -129,18 +128,37 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
             No expenses recorded for this week yet.
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             {categoryBreakdown.map((cat) => (
-              <div key={cat.category} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">{cat.category}</span>
-                  <span className="font-bold text-slate-900">{formatINR(cat.amount)}</span>
+              <div
+                key={cat.category}
+                className="bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/80 flex flex-col justify-between text-left"
+              >
+                <div>
+                  <span
+                    className="text-[11px] font-semibold text-slate-600 block truncate"
+                    title={cat.category}
+                  >
+                    {cat.category}
+                  </span>
+                  <div className="text-sm font-extrabold text-slate-900 mt-0.5">
+                    {formatINR(cat.amount)}
+                  </div>
                 </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    style={{ width: `${cat.percentageOfTotal}%` }}
-                    className="bg-emerald-600 h-full rounded-full transition-all duration-300"
-                  />
+
+                <div className="mt-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                    <span className="font-bold text-emerald-700">{cat.percentageOfTotal}%</span>
+                    <span className="text-slate-400 text-[9px]">{cat.transactionCount} txn</span>
+                  </div>
+                  <div className="w-full bg-slate-200/80 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      style={{
+                        width: `${Math.min(100, Math.max(5, cat.percentageOfTotal))}%`,
+                      }}
+                      className="bg-emerald-600 h-full rounded-full transition-all duration-300"
+                    />
+                  </div>
                 </div>
               </div>
             ))}
@@ -148,7 +166,7 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
         )}
       </div>
 
-      {/* + Add Expense CTA & 1-Tap Presets */}
+      {/* 6. Quick Demo Expenses & 7. Add Expense Button */}
       <div className="pt-2 border-t border-slate-100 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
@@ -180,31 +198,7 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
         </div>
       </div>
 
-      {/* Transactions in This Week */}
-      {transactions.length > 0 && (
-        <div className="pt-2 border-t border-slate-100">
-          <span className="text-xs font-bold text-slate-700 block mb-2">
-            Weekly Transactions ({transactions.length})
-          </span>
-          <div className="divide-y divide-slate-100 max-h-36 overflow-y-auto pr-1">
-            {transactions.map((tx) => (
-              <div key={tx.txn_id} className="py-1.5 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-semibold text-slate-800 block truncate max-w-[190px]">
-                    {tx.merchant_name || tx.main_category}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {tx.main_category} • {formatDateLabel(tx.txn_date)}
-                  </span>
-                </div>
-                <strong className="text-slate-900 font-bold">{formatINR(tx.amount)}</strong>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Prominent FINISH WEEK Button */}
+      {/* 8. Prominent FINISH WEEK Button */}
       <div className="pt-2">
         {!isCompleted ? (
           <button
