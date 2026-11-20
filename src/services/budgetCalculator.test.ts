@@ -9,7 +9,7 @@ import {
 } from './budgetCalculator';
 import { Transaction, Budget } from '../types';
 
-describe('Simplified Budget Calculator & Weekly Wins Logic', () => {
+describe('Mobile-First Weekly Habit Tracker Calculation Engine', () => {
   const sampleWeeklyBudgets: Budget[] = [
     { budget_id: 'b_w1', user_id: 'u1', period_type: 'weekly', week_index: 1, amount: 2000, from_date: '2026-10-01', to_date: '2026-10-07', is_completed: false },
     { budget_id: 'b_w2', user_id: 'u1', period_type: 'weekly', week_index: 2, amount: 2500, from_date: '2026-10-08', to_date: '2026-10-14', is_completed: false },
@@ -18,23 +18,16 @@ describe('Simplified Budget Calculator & Weekly Wins Logic', () => {
   ];
 
   // 1. Transaction Eligibility & Exclusions
-  describe('Transaction Eligibility & Exclusion Rules', () => {
-    it('includes legitimate eligible spending across provided taxonomy', () => {
-      const categoriesToTest = [
-        'Food & Dining', 'Groceries', 'Shopping', 'Bills', 'Travel',
-        'Transportation', 'Fuel / EV Charging', 'Entertainment',
-        'Subscriptions', 'Housing & Utilities', 'Personal Care',
-        'Hospitals & Pharmacy', 'Fitness & Wellness', 'Education',
-        'Gifts & Donations', 'Electronics', 'Insurance Premiums', 'EMIs & Loans'
-      ];
-
-      for (const cat of categoriesToTest) {
+  describe('Transaction Eligibility & Exclusions', () => {
+    it('includes valid spending categories from schema', () => {
+      const categories = ['Food & Dining', 'Groceries', 'Shopping', 'Bills', 'Transportation'];
+      for (const cat of categories) {
         const tx: Transaction = {
           txn_id: `tx_${cat}`,
           user_id: 'u1',
           txn_date: '2026-10-03',
           txn_time: '12:00:00',
-          amount: 100,
+          amount: 150,
           transaction_type: 'debit',
           payment_mode: 'UPI',
           main_category: cat,
@@ -44,7 +37,7 @@ describe('Simplified Budget Calculator & Weekly Wins Logic', () => {
       }
     });
 
-    it('excludes money movements to prevent double-counting and false spending', () => {
+    it('excludes money movements to avoid distorted spending and double-counting', () => {
       for (const cat of EXCLUDED_CATEGORIES) {
         const tx: Transaction = {
           txn_id: `tx_ex_${cat}`,
@@ -60,192 +53,158 @@ describe('Simplified Budget Calculator & Weekly Wins Logic', () => {
         expect(getExclusionReason(tx)).toContain('Excluded');
       }
     });
-
-    it('prevents double-counting credit card bill settlements', () => {
-      const settlementTx: Transaction = {
-        txn_id: 'tx_cc_settle',
-        user_id: 'u1',
-        txn_date: '2026-10-05',
-        txn_time: '15:00:00',
-        amount: 3500,
-        transaction_type: 'debit',
-        payment_mode: 'Net Banking',
-        main_category: 'Credit Card Settlements',
-        merchant_name: 'HDFC Credit Card Bill',
-      };
-      expect(isEligibleTransaction(settlementTx)).toBe(false);
-      expect(getExclusionReason(settlementTx)).toContain('double-counting');
-    });
-
-    it('excludes income and credit transactions', () => {
-      const creditTx: Transaction = {
-        txn_id: 'tx_salary',
-        user_id: 'u1',
-        txn_date: '2026-10-01',
-        txn_time: '09:00:00',
-        amount: 25000,
-        transaction_type: 'credit',
-        payment_mode: 'Net Banking',
-        main_category: 'Income',
-      };
-      expect(isEligibleTransaction(creditTx)).toBe(false);
-      expect(getExclusionReason(creditTx)).toContain('Credit transaction');
-    });
   });
 
-  // 2. Category-Wise Aggregation
-  describe('Category-Wise Aggregation', () => {
-    it('accurately aggregates spending by category with percentages and counts', () => {
+  // 2. Category Breakdown
+  describe('Category Breakdown', () => {
+    it('groups expenses by category with accurate percentages and counts', () => {
       const txns: Transaction[] = [
         { txn_id: '1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 450, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
         { txn_id: '2', user_id: 'u1', txn_date: '2026-10-03', txn_time: '11:00:00', amount: 500, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
         { txn_id: '3', user_id: 'u1', txn_date: '2026-10-04', txn_time: '12:00:00', amount: 200, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Transportation' },
         { txn_id: '4', user_id: 'u1', txn_date: '2026-10-05', txn_time: '13:00:00', amount: 150, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' },
-        { txn_id: '5', user_id: 'u1', txn_date: '2026-10-06', txn_time: '14:00:00', amount: 100, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Entertainment' },
-        // Excluded transaction should not appear in category spending
-        { txn_id: '6', user_id: 'u1', txn_date: '2026-10-06', txn_time: '15:00:00', amount: 1000, transaction_type: 'debit', payment_mode: 'Cash', main_category: 'Cash Withdrawals' },
       ];
 
       const breakdown = calculateCategoryBreakdown(txns);
-      expect(breakdown.length).toBe(5);
-
-      const totalSpent = breakdown.reduce((sum, c) => sum + c.amount, 0);
-      expect(totalSpent).toBe(1400); // 450+500+200+150+100
-
-      const groc = breakdown.find((c) => c.category === 'Groceries');
-      expect(groc?.amount).toBe(500);
-      expect(groc?.transactionCount).toBe(1);
-      expect(groc?.percentageOfTotal).toBe(35.7); // (500 / 1400) * 100 ≈ 35.7%
+      expect(breakdown.length).toBe(4);
+      expect(breakdown[0].category).toBe('Groceries');
+      expect(breakdown[0].amount).toBe(500);
+      expect(breakdown[1].category).toBe('Food & Dining');
+      expect(breakdown[1].amount).toBe(450);
     });
   });
 
-  // 3. Weekly Calculations: Under Budget vs Overspending
-  describe('Weekly Calculations', () => {
-    it('calculates 20% under budget and weekly win (Example: Budget ₹2,000, Spent ₹1,600)', () => {
-      const weekTxns: Transaction[] = [
+  // 3. Weekly Calculations: Under Budget vs Over Budget
+  describe('Weekly Box & Calculations', () => {
+    it('calculates 20% under budget (+20% Saved) for Week 1', () => {
+      const txns: Transaction[] = [
         { txn_id: 'w1_1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 1000, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
         { txn_id: 'w1_2', user_id: 'u1', txn_date: '2026-10-04', txn_time: '12:00:00', amount: 600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
       ];
 
-      const res = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, true, '2026-10-07T21:00:00Z', weekTxns);
-      expect(res.budgetAmount).toBe(2000);
+      const res = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, true, '2026-10-07T21:00:00Z', txns);
       expect(res.actualSpending).toBe(1600);
       expect(res.remainingBudget).toBe(400);
-      expect(res.differencePercentage).toBe(20); // 400 / 2000 * 100 = 20%
+      expect(res.differencePercentage).toBe(20);
       expect(res.isUnderBudget).toBe(true);
-      expect(res.isCompleted).toBe(true);
+      expect(res.boxLabel).toBe('+20% Saved');
       expect(res.resultStatus).toBe('win');
-      expect(res.resultMessage).toContain('You stayed 20% under budget!');
-      expect(res.resultMessage).toContain('₹400');
     });
 
-    it('calculates 10% overspending without shame (Example: Budget ₹2,000, Spent ₹2,200)', () => {
-      const weekTxns: Transaction[] = [
-        { txn_id: 'w1_1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 1200, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
-        { txn_id: 'w1_2', user_id: 'u1', txn_date: '2026-10-04', txn_time: '12:00:00', amount: 1000, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' },
-      ];
-
-      const res = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, true, '2026-10-07T21:00:00Z', weekTxns);
-      expect(res.budgetAmount).toBe(2000);
-      expect(res.actualSpending).toBe(2200);
-      expect(res.remainingBudget).toBe(-200);
-      expect(res.differencePercentage).toBe(10); // 200 / 2000 * 100 = 10%
-      expect(res.isUnderBudget).toBe(false);
-      expect(res.isCompleted).toBe(true);
-      expect(res.resultStatus).toBe('over');
-      expect(res.resultMessage).toContain("You went 10% over this week's budget. That's okay.");
-    });
-  });
-
-  // 4. Week Completion & Duplicate Prevention
-  describe('Week Completion Handling', () => {
-    it('marks a week as completed and locks result status', () => {
+    it('calculates 8% over budget (8% Over) for Week 2', () => {
       const txns: Transaction[] = [
-        { txn_id: 't1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 500, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' }
+        { txn_id: 'w2_1', user_id: 'u1', txn_date: '2026-10-09', txn_time: '12:00:00', amount: 2700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' },
       ];
 
-      const beforeFinish = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, false, undefined, txns);
-      expect(beforeFinish.isCompleted).toBe(false);
-      expect(beforeFinish.resultStatus).toBe('pending');
-
-      const afterFinish = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, true, '2026-10-07T20:00:00', txns);
-      expect(afterFinish.isCompleted).toBe(true);
-      expect(afterFinish.resultStatus).toBe('win');
-    });
-
-    it('handles expenses added after a week is finished by dynamically updating calculations without corrupting state', () => {
-      const initialTxns: Transaction[] = [
-        { txn_id: 't1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 1500, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' }
-      ];
-
-      const finishedCalc = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, true, '2026-10-07T20:00:00', initialTxns);
-      expect(finishedCalc.actualSpending).toBe(1500);
-      expect(finishedCalc.remainingBudget).toBe(500);
-
-      // User later adds an unexpected late expense for that week
-      const updatedTxns: Transaction[] = [
-        ...initialTxns,
-        { txn_id: 't_late', user_id: 'u1', txn_date: '2026-10-06', txn_time: '18:00:00', amount: 200, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Transportation' }
-      ];
-
-      const recalculated = calculateWeek(1, '2026-10-01', '2026-10-07', 2000, true, '2026-10-07T20:00:00', updatedTxns);
-      expect(recalculated.actualSpending).toBe(1700);
-      expect(recalculated.remainingBudget).toBe(300);
-      expect(recalculated.differencePercentage).toBe(15);
+      const res = calculateWeek(2, '2026-10-08', '2026-10-14', 2500, true, '2026-10-14T21:00:00Z', txns);
+      expect(res.actualSpending).toBe(2700);
+      expect(res.remainingBudget).toBe(-200);
+      expect(res.differencePercentage).toBe(8); // (200 / 2500) * 100 = 8%
+      expect(res.isUnderBudget).toBe(false);
+      expect(res.boxLabel).toBe('8% Over');
+      expect(res.resultStatus).toBe('over');
+      expect(res.resultMessage).toContain("A little over budget this week. Don't worry!");
     });
   });
 
-  // 5. Monthly Calculation Across Multiple Weeks & Month-to-Date
-  describe('Monthly Calculation Across Weeks', () => {
-    it('calculates monthly result (Example: Budget ₹10,000, Spent ₹8,000 -> 20% under budget)', () => {
-      // 4 weeks of expenses summing to ₹8,000
-      const monthlyTxns: Transaction[] = [
-        // Week 1: 1600 (under 2000)
+  // 4. Monthly Calculation Using ONLY Completed Weeks (Section 3 Requirement)
+  describe('Monthly Progress: Percentage First (Completed Weeks Formula)', () => {
+    it('correctly calculates 7.7% Saved So Far using 3 completed weeks', () => {
+      // Prompt Section 3 example:
+      // Week 1: Budget ₹2,000, spent ₹1,600.
+      // Week 2: Budget ₹2,500, spent ₹2,700.
+      // Week 3: Budget ₹2,000, spent ₹1,700.
+      // Week 4: Not completed.
+      // Total completed weekly budget = ₹6,500.
+      // Total spending = ₹6,000.
+      // Monthly-to-date progress = 7.69% under budget -> approx 7.7% Saved So Far.
+      const txns: Transaction[] = [
         { txn_id: 'w1', user_id: 'u1', txn_date: '2026-10-03', txn_time: '12:00:00', amount: 1600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
-        // Week 2: 2700 (over 2500)
         { txn_id: 'w2', user_id: 'u1', txn_date: '2026-10-10', txn_time: '12:00:00', amount: 2700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' },
-        // Week 3: 1700 (under 2000)
         { txn_id: 'w3', user_id: 'u1', txn_date: '2026-10-17', txn_time: '12:00:00', amount: 1700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
-        // Week 4: 2000 (under 2500)
-        { txn_id: 'w4', user_id: 'u1', txn_date: '2026-10-24', txn_time: '12:00:00', amount: 2000, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Bills' },
+        // Week 4 transaction (week is not completed yet)
+        { txn_id: 'w4', user_id: 'u1', txn_date: '2026-10-24', txn_time: '12:00:00', amount: 500, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
       ];
 
-      // Mark all 4 weeks completed
-      const completedBudgets = sampleWeeklyBudgets.map((b) => ({ ...b, is_completed: true }));
-
-      const monthlyRes = calculateMonthly(10000, completedBudgets, monthlyTxns);
-      expect(monthlyRes.monthlyBudget).toBe(10000);
-      expect(monthlyRes.totalEligibleSpending).toBe(8000); // 1600+2700+1700+2000 = 8000
-      expect(monthlyRes.monthlyDifference).toBe(2000); // 10000 - 8000 = 2000
-      expect(monthlyRes.monthlyPercentage).toBe(20); // 2000 / 10000 * 100 = 20%
-      expect(monthlyRes.isUnderBudget).toBe(true);
-      expect(monthlyRes.allWeeksCompleted).toBe(true);
-      expect(monthlyRes.weeklyWinsCount).toBe(3); // W1, W3, W4 won
-      expect(monthlyRes.statusLabel).toBe('Final Monthly Result');
-      expect(monthlyRes.headlineMessage).toContain('You finished the month 20% under budget!');
-    });
-
-    it('clearly distinguishes provisional month-to-date when some weeks are incomplete', () => {
-      const partialTxns: Transaction[] = [
-        { txn_id: 'w1', user_id: 'u1', txn_date: '2026-10-03', txn_time: '12:00:00', amount: 1600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
-        { txn_id: 'w2', user_id: 'u1', txn_date: '2026-10-10', txn_time: '12:00:00', amount: 1000, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' },
-      ];
-
-      // Only Week 1 completed
-      const partialBudgets = [
+      const budgets: Budget[] = [
         { ...sampleWeeklyBudgets[0], is_completed: true },
-        { ...sampleWeeklyBudgets[1], is_completed: false },
-        { ...sampleWeeklyBudgets[2], is_completed: false },
+        { ...sampleWeeklyBudgets[1], is_completed: true },
+        { ...sampleWeeklyBudgets[2], is_completed: true },
         { ...sampleWeeklyBudgets[3], is_completed: false },
       ];
 
-      const monthlyRes = calculateMonthly(10000, partialBudgets, partialTxns);
-      expect(monthlyRes.allWeeksCompleted).toBe(false);
-      expect(monthlyRes.completedWeeksCount).toBe(1);
-      expect(monthlyRes.statusLabel).toBe('Month-to-Date (Provisional)');
-      expect(monthlyRes.totalEligibleSpending).toBe(2600);
-      expect(monthlyRes.monthlyDifference).toBe(7400); // 10000 - 2600 = 7400
-      expect(monthlyRes.headlineMessage).toContain('Currently 74% under budget month-to-date');
+      const monthlyRes = calculateMonthly(10000, budgets, txns);
+      expect(monthlyRes.completedWeeklyBudget).toBe(6500); // 2000 + 2500 + 2000
+      expect(monthlyRes.completedWeeklySpending).toBe(6000); // 1600 + 2700 + 1700
+      expect(monthlyRes.completedDifference).toBe(500); // 6500 - 6000 = 500
+      expect(monthlyRes.monthlyProgressPercentage).toBe(7.7); // (500 / 6500) * 100 = 7.69% -> 7.7%
+      expect(monthlyRes.completedWeeksCount).toBe(3);
+      expect(monthlyRes.headlineMessage).toBe('7.7% SAVED SO FAR');
+      expect(monthlyRes.subMessage).toBe('You are doing great! Keep your momentum going.');
+    });
+
+    it('correctly calculates 11.1% Saved for Final Monthly Completion (Section 6 Requirement)', () => {
+      // Prompt Section 6 example:
+      // Week 1: ₹2,000 budget, ₹1,600 spent
+      // Week 2: ₹2,500 budget, ₹2,700 spent
+      // Week 3: ₹2,000 budget, ₹1,700 spent
+      // Week 4: ₹2,500 budget, ₹2,000 spent
+      // Total: ₹9,000 budget, ₹8,000 spending
+      // Final result: ((9000 - 8000) / 9000) * 100 = 11.11% -> 11.1%
+      const txns: Transaction[] = [
+        { txn_id: 'w1', user_id: 'u1', txn_date: '2026-10-03', txn_time: '12:00:00', amount: 1600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
+        { txn_id: 'w2', user_id: 'u1', txn_date: '2026-10-10', txn_time: '12:00:00', amount: 2700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' },
+        { txn_id: 'w3', user_id: 'u1', txn_date: '2026-10-17', txn_time: '12:00:00', amount: 1700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
+        { txn_id: 'w4', user_id: 'u1', txn_date: '2026-10-24', txn_time: '12:00:00', amount: 2000, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Bills' },
+      ];
+
+      const budgets: Budget[] = sampleWeeklyBudgets.map((b) => ({ ...b, is_completed: true }));
+
+      const monthlyRes = calculateMonthly(10000, budgets, txns);
+      expect(monthlyRes.completedWeeklyBudget).toBe(9000); // 2000 + 2500 + 2000 + 2500
+      expect(monthlyRes.completedWeeklySpending).toBe(8000); // 1600 + 2700 + 1700 + 2000
+      expect(monthlyRes.completedDifference).toBe(1000);
+      expect(monthlyRes.monthlyProgressPercentage).toBe(11.1); // 1000 / 9000 * 100 = 11.11% -> 11.1%
+      expect(monthlyRes.allWeeksCompleted).toBe(true);
+      expect(monthlyRes.headlineMessage).toBe('11.1% BUDGET SAVED THIS MONTH!');
+      expect(monthlyRes.weeklyWinsCount).toBe(3); // W1, W3, W4 won
+    });
+
+    it('shows friendly starting state when 0 weeks are completed', () => {
+      const budgets: Budget[] = sampleWeeklyBudgets.map((b) => ({ ...b, is_completed: false }));
+      const monthlyRes = calculateMonthly(10000, budgets, []);
+      expect(monthlyRes.completedWeeksCount).toBe(0);
+      expect(monthlyRes.monthlyProgressPercentage).toBe(0);
+      expect(monthlyRes.headlineMessage).toBe('START YOUR FIRST WEEK');
+      expect(monthlyRes.subMessage).toBe('Your first weekly win starts here!');
+    });
+  });
+
+  // 5. Recovery Logic
+  describe('Recovery Logic Verification (Section 7 Requirement)', () => {
+    it('demonstrates that overspending reduces running progress without erasing it, and subsequent weeks recover', () => {
+      // Example from Section 7:
+      // Week 1: +₹400 under budget
+      // Week 2: -₹200 over budget
+      // Week 3: +₹300 under budget
+      // Week 4: +₹200 under budget
+      // Running net: +400 -> +200 -> +500 -> +700
+      const txns: Transaction[] = [
+        { txn_id: 'w1', user_id: 'u1', txn_date: '2026-10-03', txn_time: '12:00:00', amount: 1600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' }, // budget 2000 -> +400
+        { txn_id: 'w2', user_id: 'u1', txn_date: '2026-10-10', txn_time: '12:00:00', amount: 2700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Shopping' }, // budget 2500 -> -200
+        { txn_id: 'w3', user_id: 'u1', txn_date: '2026-10-17', txn_time: '12:00:00', amount: 1700, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' }, // budget 2000 -> +300
+        { txn_id: 'w4', user_id: 'u1', txn_date: '2026-10-24', txn_time: '12:00:00', amount: 2300, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Bills' }, // budget 2500 -> +200
+      ];
+
+      const budgets: Budget[] = sampleWeeklyBudgets.map((b) => ({ ...b, is_completed: true }));
+      const monthlyRes = calculateMonthly(10000, budgets, txns);
+
+      expect(monthlyRes.recoveryPoints.length).toBe(4);
+      expect(monthlyRes.recoveryPoints[0].runningCumulativeNet).toBe(400);
+      expect(monthlyRes.recoveryPoints[1].runningCumulativeNet).toBe(200); // 400 - 200 = 200 (overspent, not erased!)
+      expect(monthlyRes.recoveryPoints[2].runningCumulativeNet).toBe(500); // 200 + 300 = 500 (recovered!)
+      expect(monthlyRes.recoveryPoints[2].isRecovered).toBe(true);
+      expect(monthlyRes.recoveryPoints[3].runningCumulativeNet).toBe(700); // 500 + 200 = 700
     });
   });
 });

@@ -12,7 +12,7 @@ export interface Budget {
   budget_id: string;
   user_id: string;
   period_type: 'monthly' | 'weekly';
-  week_index?: number; // 1, 2, 3, 4 for weekly budgets
+  week_index?: number; // 1, 2, 3, 4
   amount: number;
   from_date: string;
   to_date: string;
@@ -60,27 +60,33 @@ export interface WeeklyCalculation {
   isCompleted: boolean;
   completedAt?: string;
   resultStatus: 'win' | 'over' | 'pending';
-  resultBadgeLabel: string;
+  boxLabel: string; // e.g. "+20% Saved", "8% Over", "Not Started", "In Progress"
   resultMessage: string;
   categoryBreakdown: CategorySpend[];
   transactions: Transaction[];
 }
 
+export interface RecoveryPoint {
+  weekIndex: number;
+  weekLabel: string;
+  weekDiff: number; // positive = under, negative = over
+  runningCumulativeNet: number;
+  isRecovered: boolean;
+}
+
 export interface MonthlyCalculation {
   monthlyBudget: number;
-  totalWeeklyBudgets: number;
-  unallocatedMonthlyBudget: number;
-  totalEligibleSpending: number;
-  totalExcludedSpending: number;
-  monthlyDifference: number; // monthlyBudget - totalEligibleSpending
-  monthlyPercentage: number; // (monthlyDifference / monthlyBudget) * 100
+  completedWeeklyBudget: number;
+  completedWeeklySpending: number;
+  completedDifference: number; // completedWeeklyBudget - completedWeeklySpending
+  monthlyProgressPercentage: number; // ((completedBudget - completedSpending) / completedBudget) * 100
   isUnderBudget: boolean;
   allWeeksCompleted: boolean;
   completedWeeksCount: number;
+  totalWeeksCount: number;
   weeklyWinsCount: number;
-  statusLabel: string;
-  headlineMessage: string;
-  resultMessage: string;
+  headlineMessage: string; // e.g. "20% SAVED", "7.7% SAVED SO FAR"
+  subMessage: string; // e.g. "You are doing great! Keep your momentum going."
   weeks: WeeklyCalculation[];
-  categoryBreakdown: CategorySpend[];
+  recoveryPoints: RecoveryPoint[];
 }

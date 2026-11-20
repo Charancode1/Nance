@@ -1,15 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import initialData from './data/mockData.json';
-import { Budget, Transaction } from './types';
+import { Budget, Transaction, WeeklyCalculation } from './types';
 import { calculateMonthly } from './services/budgetCalculator';
-import { Header } from './components/Header';
-import { MonthlyOverview } from './components/MonthlyOverview';
-import { WeeklyWinsStrip } from './components/WeeklyWinsStrip';
-import { WeeklyTracker } from './components/WeeklyTracker';
-import { MonthlyResultCard } from './components/MonthlyResultCard';
-import { BudgetSetupModal } from './components/BudgetSetupModal';
+import { MobileTopBoxes } from './components/MobileTopBoxes';
+import { MobileMonthlyProgress } from './components/MobileMonthlyProgress';
+import { MobileWeeklyTracker } from './components/MobileWeeklyTracker';
 import { AddExpenseModal } from './components/AddExpenseModal';
+import { WeekResultModal } from './components/WeekResultModal';
+import { MonthCompletionModal } from './components/MonthCompletionModal';
 import { RulesModal } from './components/RulesModal';
+import { RotateCcw, HelpCircle, Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
   // State: User-controlled budgets and transactions
@@ -25,9 +25,10 @@ export const App: React.FC = () => {
   const [selectedWeekIndex, setSelectedWeekIndex] = useState<number>(2);
 
   // Modals state
-  const [isBudgetSetupOpen, setIsBudgetSetupOpen] = useState<boolean>(false);
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState<boolean>(false);
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
+  const [justFinishedWeek, setJustFinishedWeek] = useState<WeeklyCalculation | null>(null);
+  const [showMonthCompletion, setShowMonthCompletion] = useState<boolean>(false);
 
   // Monthly calculation engine execution
   const monthlyCalc = useMemo(() => {
@@ -42,12 +43,13 @@ export const App: React.FC = () => {
     );
   }, [monthlyCalc.weeks, selectedWeekIndex]);
 
-  // Handlers
+  // Finish Week Handler (Section 5)
   const handleFinishWeek = (weekIndex: number) => {
-    setWeeklyBudgets((prev) =>
-      prev.map((b) => {
+    let completedWeekObj: WeeklyCalculation | null = null;
+
+    setWeeklyBudgets((prev) => {
+      const nextBudgets = prev.map((b) => {
         if (b.week_index === weekIndex) {
-          if (b.is_completed) return b; // Prevent duplicate clicks
           return {
             ...b,
             is_completed: true,
@@ -55,8 +57,24 @@ export const App: React.FC = () => {
           };
         }
         return b;
-      })
-    );
+      });
+
+      // Recalculate with updated budgets to get exact result
+      const updatedMonthly = calculateMonthly(monthlyBudget, nextBudgets, transactions);
+      const finished = updatedMonthly.weeks.find((w) => w.weekIndex === weekIndex) || null;
+      completedWeekObj = finished;
+
+      // Check if all 4 weeks are now completed
+      if (updatedMonthly.allWeeksCompleted) {
+        setTimeout(() => setShowMonthCompletion(true), 600);
+      }
+
+      return nextBudgets;
+    });
+
+    if (completedWeekObj) {
+      setJustFinishedWeek(completedWeekObj);
+    }
   };
 
   const handleReopenWeek = (weekIndex: number) => {
@@ -95,85 +113,118 @@ export const App: React.FC = () => {
     handleAddTransaction(newTxn);
   };
 
-  const handleSaveBudgets = (newMonthly: number, newWeekly: Budget[]) => {
-    setMonthlyBudget(newMonthly);
-    setWeeklyBudgets(newWeekly);
-  };
-
   const handleResetDemo = () => {
     setMonthlyBudget(initialData.monthly_budget);
     setWeeklyBudgets(initialData.weekly_budgets as unknown as Budget[]);
     setTransactions(initialData.transactions as unknown as Transaction[]);
     setSelectedWeekIndex(2);
+    setJustFinishedWeek(null);
+    setShowMonthCompletion(false);
+  };
+
+  const handleStartNewMonth = () => {
+    // Starts a fresh month with uncompleted weeks
+    setWeeklyBudgets((prev) =>
+      prev.map((b) => ({
+        ...b,
+        is_completed: false,
+        completed_at: undefined,
+      }))
+    );
+    setTransactions([]);
+    setSelectedWeekIndex(1);
+    setShowMonthCompletion(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans">
-      {/* Top Header */}
-      <Header
-        onOpenBudgetSetup={() => setIsBudgetSetupOpen(true)}
-        onOpenAddExpense={() => setIsAddExpenseOpen(true)}
-        onOpenRules={() => setIsRulesOpen(true)}
-        onResetDemo={handleResetDemo}
-      />
-
-      {/* Main Experience: Set Budget -> Track Expenses -> Finish Week -> See Result */}
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* 1. Monthly Budget & Progress Overview */}
-        <MonthlyOverview
-          monthlyCalc={monthlyCalc}
-          onOpenBudgetSetup={() => setIsBudgetSetupOpen(true)}
-        />
-
-        {/* 2. Compact 4-Week Wins Strip */}
-        <WeeklyWinsStrip
-          weeks={monthlyCalc.weeks}
-          selectedWeekIndex={selectedWeekIndex}
-          onSelectWeek={setSelectedWeekIndex}
-        />
-
-        {/* 3. The Core Feature: Weekly Tracker with Category Spending, Finish Week Button & Expenses */}
-        <WeeklyTracker
-          activeWeek={activeWeek}
-          onFinishWeek={handleFinishWeek}
-          onReopenWeek={handleReopenWeek}
-          onOpenAddExpense={() => setIsAddExpenseOpen(true)}
-          onAddQuickExpense={handleAddQuickExpense}
-        />
-
-        {/* 4. Overall Monthly Results & Week-by-Week Audit Table */}
-        <MonthlyResultCard
-          monthlyCalc={monthlyCalc}
-          onSelectWeek={setSelectedWeekIndex}
-        />
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+    <div className="min-h-screen bg-slate-900/10 flex justify-center py-0 sm:py-6 px-0 sm:px-4 font-sans antialiased">
+      {/* Mobile-First Centered Container */}
+      <div className="w-full max-w-[420px] bg-white min-h-screen sm:min-h-[820px] sm:rounded-[36px] shadow-2xl border-x sm:border border-slate-200/90 flex flex-col overflow-hidden relative">
+        {/* Top App Bar */}
+        <header className="px-4 py-3 bg-white/95 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-800">Nance</span>
-            <span>•</span>
-            <span>Weekly Wins Budgeting Habit Demo</span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-xs">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-tight text-slate-900 leading-none">
+                Weekly Wins
+              </h1>
+              <span className="text-[10px] text-slate-400 font-medium">
+                Small weekly wins. Better money habits.
+              </span>
+            </div>
           </div>
-          <div>Small weekly wins. Better money habits.</div>
-        </div>
-      </footer>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsRulesOpen(true)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title="How calculations work"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleResetDemo}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title="Reset Demo"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Mobile Main Body */}
+        <main className="flex-1 p-3.5 sm:p-4 space-y-3.5 overflow-y-auto">
+          {/* 1. Four Weekly Boxes at the Top (Section 2) */}
+          <MobileTopBoxes
+            weeks={monthlyCalc.weeks}
+            selectedWeekIndex={selectedWeekIndex}
+            onSelectWeek={setSelectedWeekIndex}
+          />
+
+          {/* 2. Monthly Progress: Percentage First (Section 3) */}
+          <MobileMonthlyProgress monthlyCalc={monthlyCalc} />
+
+          {/* 3. Selected Week: Simple Expense Tracker & Finish Week (Section 4 & 5) */}
+          <MobileWeeklyTracker
+            activeWeek={activeWeek}
+            onFinishWeek={handleFinishWeek}
+            onReopenWeek={handleReopenWeek}
+            onOpenAddExpense={() => setIsAddExpenseOpen(true)}
+            onAddQuickExpense={handleAddQuickExpense}
+          />
+        </main>
+      </div>
 
       {/* Modals */}
-      <BudgetSetupModal
-        isOpen={isBudgetSetupOpen}
-        onClose={() => setIsBudgetSetupOpen(false)}
-        monthlyBudget={monthlyBudget}
-        weeklyBudgets={weeklyBudgets}
-        onSaveBudgets={handleSaveBudgets}
-      />
-
       <AddExpenseModal
         isOpen={isAddExpenseOpen}
         onClose={() => setIsAddExpenseOpen(false)}
         defaultDate={activeWeek.startDate}
         onAddTransaction={handleAddTransaction}
+      />
+
+      {justFinishedWeek && (
+        <WeekResultModal
+          isOpen={Boolean(justFinishedWeek)}
+          onClose={() => setJustFinishedWeek(null)}
+          week={justFinishedWeek}
+          hasNextWeek={justFinishedWeek.weekIndex < 4}
+          onNextWeek={() => {
+            setSelectedWeekIndex(justFinishedWeek.weekIndex + 1);
+            setJustFinishedWeek(null);
+          }}
+        />
+      )}
+
+      <MonthCompletionModal
+        isOpen={showMonthCompletion}
+        onClose={() => setShowMonthCompletion(false)}
+        monthlyCalc={monthlyCalc}
+        onStartNewMonth={handleStartNewMonth}
       />
 
       <RulesModal
