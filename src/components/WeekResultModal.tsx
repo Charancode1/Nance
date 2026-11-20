@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { WeeklyCalculation } from '../types';
 import { formatINR } from '../utils/formatters';
 import { fireWinConfetti } from '../utils/confetti';
-import { Trophy, Heart, ArrowRight, X } from 'lucide-react';
+import { Trophy, Heart, ArrowRight, X, CheckCircle2 } from 'lucide-react';
 
 interface WeekResultModalProps {
   isOpen: boolean;
@@ -19,10 +19,11 @@ export const WeekResultModal: React.FC<WeekResultModalProps> = ({
   hasNextWeek,
   onNextWeek,
 }) => {
-  const isWin = week.isUnderBudget;
+  const isZeroBudget = week.budgetAmount === 0;
+  const isWin = !isZeroBudget && week.isUnderBudget;
   const remaining = Math.abs(week.remainingBudget);
 
-  // Trigger subtle celebratory confetti when opening an under-budget weekly win
+  // Trigger subtle celebratory confetti ONLY when winning with a set budget (> ₹0)
   useEffect(() => {
     if (isOpen && isWin) {
       fireWinConfetti();
@@ -43,7 +44,53 @@ export const WeekResultModal: React.FC<WeekResultModalProps> = ({
           <X className="w-4 h-4" />
         </button>
 
-        {isWin ? (
+        {isZeroBudget ? (
+          /* ========================================================= */
+          /* Scenario Neutral: Week Completed With ₹0 Budget */
+          /* ========================================================= */
+          <>
+            <div className="my-2 flex justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-700 ring-4 ring-slate-50 flex items-center justify-center shadow-xs">
+                <CheckCircle2 className="w-7 h-7 text-slate-600" />
+              </div>
+            </div>
+
+            <div className="mt-2">
+              <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 inline-block">
+                WEEK COMPLETED
+              </span>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-2.5 leading-snug">
+              You completed {week.weekLabel}!
+            </h3>
+
+            <div className="my-2.5 space-y-1">
+              <p className="text-xs text-slate-600 leading-relaxed px-1">
+                No spending budget was set for this week.
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed pt-1">
+                Configure your budgets anytime in <strong>Set Budget</strong> to track your savings percentage and celebrate weekly wins!
+              </p>
+            </div>
+
+            <div className="my-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-left">
+              <span className="text-[10px] uppercase font-bold text-slate-700 block mb-2 tracking-wider">
+                {week.weekLabel} Summary
+              </span>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Budget:</span>
+                  <span className="font-semibold text-slate-900">₹0</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Spent:</span>
+                  <span className="font-semibold text-slate-900">{formatINR(week.actualSpending)}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : isWin ? (
           /* ========================================================= */
           /* Scenario A: User Finishes Under Budget (Emerald Green Theme) */
           /* ========================================================= */

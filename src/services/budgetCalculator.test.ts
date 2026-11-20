@@ -207,4 +207,192 @@ describe('Mobile-First Weekly Habit Tracker Calculation Engine', () => {
       expect(monthlyRes.recoveryPoints[3].runningCumulativeNet).toBe(700); // 500 + 200 = 700
     });
   });
+
+  // 6. User-Controlled Custom & Independent Weekly Budgets
+  describe('User-Controlled Custom & Independent Weekly Budgets', () => {
+    it('supports unequal weekly budget allocations (e.g. ₹4,000 rent in Week 1, ₹2,000 in subsequent weeks)', () => {
+      // User sets Monthly: ₹10,000
+      // Week 1: ₹4,000 (higher for PG rent/deposit)
+      // Week 2: ₹2,000
+      // Week 3: ₹2,000
+      // Week 4: ₹2,000
+      // Total = ₹10,000
+      const customBudgets: Budget[] = [
+        { budget_id: 'b1', user_id: 'u1', period_type: 'weekly', week_index: 1, amount: 4000, from_date: '2026-10-01', to_date: '2026-10-07', is_completed: true },
+        { budget_id: 'b2', user_id: 'u1', period_type: 'weekly', week_index: 2, amount: 2000, from_date: '2026-10-08', to_date: '2026-10-14', is_completed: true },
+        { budget_id: 'b3', user_id: 'u1', period_type: 'weekly', week_index: 3, amount: 2000, from_date: '2026-10-15', to_date: '2026-10-21', is_completed: false },
+        { budget_id: 'b4', user_id: 'u1', period_type: 'weekly', week_index: 4, amount: 2000, from_date: '2026-10-22', to_date: '2026-10-28', is_completed: false },
+      ];
+
+      const txns: Transaction[] = [
+        // Week 1: spends 3600 of 4000 budget -> under by 400 (10% under budget)
+        { txn_id: 'w1_tx1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 3600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Bills' },
+        // Week 2: spends 2100 of 2000 budget -> over by 100 (5% over budget)
+        { txn_id: 'w2_tx1', user_id: 'u1', txn_date: '2026-10-09', txn_time: '12:00:00', amount: 2100, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
+      ];
+
+      const monthlyRes = calculateMonthly(10000, customBudgets, txns);
+
+      // Verify Week 1
+      const w1 = monthlyRes.weeks[0];
+      expect(w1.budgetAmount).toBe(4000);
+      expect(w1.actualSpending).toBe(3600);
+      expect(w1.remainingBudget).toBe(400);
+      expect(w1.differencePercentage).toBe(10); // (400 / 4000) * 100 = 10%
+      expect(w1.isUnderBudget).toBe(true);
+      expect(w1.boxLabel).toBe('+10% Saved');
+
+      // Verify Week 2
+      const w2 = monthlyRes.weeks[1];
+      expect(w2.budgetAmount).toBe(2000);
+      expect(w2.actualSpending).toBe(2100);
+      expect(w2.remainingBudget).toBe(-100);
+      expect(w2.differencePercentage).toBe(5); // (100 / 2000) * 100 = 5%
+      expect(w2.isUnderBudget).toBe(false);
+      expect(w2.boxLabel).toBe('5% Over');
+
+      // Verify Monthly Progress from Completed Weeks:
+      // Total completed budget = 4000 + 2000 = 6000
+      // Total completed spending = 3600 + 2100 = 5700
+      // Net saved = 300
+      // Percentage = (300 / 6000) * 100 = 5.0%
+      expect(monthlyRes.completedWeeklyBudget).toBe(6000);
+      expect(monthlyRes.completedWeeklySpending).toBe(5700);
+      expect(monthlyRes.completedDifference).toBe(300);
+      expect(monthlyRes.monthlyProgressPercentage).toBe(5.0);
+      expect(monthlyRes.headlineMessage).toBe('5% SAVED SO FAR');
+    });
+
+    it('retains completed week historical budgets and results even if user reallocates upcoming weeks', () => {
+      // Suppose Week 1 was completed with budget ₹4,000, actual ₹3,600 (+10% Saved).
+      // User then updates remaining budget: Week 3 = ₹3,000, Week 4 = ₹1,000.
+      const initialCompletedW1: Budget = {
+        budget_id: 'b1',
+        user_id: 'u1',
+        period_type: 'weekly',
+        week_index: 1,
+        amount: 4000,
+        from_date: '2026-10-01',
+        to_date: '2026-10-07',
+        is_completed: true,
+        completed_at: '2026-10-07T20:00:00Z',
+      };
+
+      const updatedBudgets: Budget[] = [
+        initialCompletedW1, // Week 1 is locked with original 4000
+        { budget_id: 'b2', user_id: 'u1', period_type: 'weekly', week_index: 2, amount: 2000, from_date: '2026-10-08', to_date: '2026-10-14', is_completed: false },
+        { budget_id: 'b3', user_id: 'u1', period_type: 'weekly', week_index: 3, amount: 3000, from_date: '2026-10-15', to_date: '2026-10-21', is_completed: false }, // increased
+        { budget_id: 'b4', user_id: 'u1', period_type: 'weekly', week_index: 4, amount: 1000, from_date: '2026-10-22', to_date: '2026-10-28', is_completed: false }, // decreased
+      ];
+
+      const txns: Transaction[] = [
+        { txn_id: 'w1_tx1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '10:00:00', amount: 3600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Bills' },
+      ];
+
+      const res = calculateMonthly(10000, updatedBudgets, txns);
+      expect(res.weeks[0].budgetAmount).toBe(4000);
+      expect(res.weeks[0].differencePercentage).toBe(10);
+      expect(res.weeks[0].boxLabel).toBe('+10% Saved');
+      expect(res.weeks[2].budgetAmount).toBe(3000);
+      expect(res.weeks[3].budgetAmount).toBe(1000);
+    });
+  });
+
+  // 7. Initial ₹0 Budget, Week 1 Editing & Zero-Budget Safety
+  describe('Initial ₹0 Default Budgets & Zero-Budget Safety', () => {
+    const zeroWeeklyBudgets: Budget[] = [
+      { budget_id: 'b1', user_id: 'u1', period_type: 'weekly', week_index: 1, amount: 0, from_date: '2026-10-01', to_date: '2026-10-07', is_completed: false },
+      { budget_id: 'b2', user_id: 'u1', period_type: 'weekly', week_index: 2, amount: 0, from_date: '2026-10-08', to_date: '2026-10-14', is_completed: false },
+      { budget_id: 'b3', user_id: 'u1', period_type: 'weekly', week_index: 3, amount: 0, from_date: '2026-10-15', to_date: '2026-10-21', is_completed: false },
+      { budget_id: 'b4', user_id: 'u1', period_type: 'weekly', week_index: 4, amount: 0, from_date: '2026-10-22', to_date: '2026-10-28', is_completed: false },
+    ];
+
+    it('Scenario 1: completely new user starts with ₹0 budgets and receives safe neutral states', () => {
+      const res = calculateMonthly(0, zeroWeeklyBudgets, []);
+
+      // Check all weeks
+      for (const w of res.weeks) {
+        expect(w.budgetAmount).toBe(0);
+        expect(w.actualSpending).toBe(0);
+        expect(w.differencePercentage).toBe(0);
+        expect(w.spendingPercentage).toBe(0);
+        expect(isNaN(w.differencePercentage)).toBe(false);
+        expect(isFinite(w.differencePercentage)).toBe(true);
+        expect(w.boxLabel).toBe('Not Set');
+        expect(w.resultMessage).toBe('Set your weekly budget to start.');
+        expect(w.isCompleted).toBe(false);
+      }
+
+      // Monthly neutral state
+      expect(res.completedWeeklyBudget).toBe(0);
+      expect(res.monthlyProgressPercentage).toBe(0);
+      expect(isNaN(res.monthlyProgressPercentage)).toBe(false);
+      expect(res.headlineMessage).toBe('SET YOUR BUDGET TO START');
+      expect(res.subMessage).toBe('Set your monthly and weekly budgets to start tracking.');
+    });
+
+    it('Scenario 2 & 3: Week 1 is editable before completion and saves budget changes', () => {
+      // User sets Week 1 to ₹2,500, then edits to ₹3,000 before finishing
+      const updatedBudgets: Budget[] = [
+        { ...zeroWeeklyBudgets[0], amount: 3000 },
+        { ...zeroWeeklyBudgets[1], amount: 2000 },
+        { ...zeroWeeklyBudgets[2], amount: 2000 },
+        { ...zeroWeeklyBudgets[3], amount: 2000 },
+      ];
+
+      const txns: Transaction[] = [
+        { txn_id: 'tx_w1', user_id: 'u1', txn_date: '2026-10-02', txn_time: '12:00:00', amount: 2400, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
+      ];
+
+      const res = calculateMonthly(9000, updatedBudgets, txns);
+      const w1 = res.weeks[0];
+      expect(w1.budgetAmount).toBe(3000);
+      expect(w1.actualSpending).toBe(2400);
+      expect(w1.remainingBudget).toBe(600);
+      expect(w1.differencePercentage).toBe(20); // (600 / 3000) * 100 = 20%
+    });
+
+    it('Scenario 5: Adding expenses without configuring budget never produces NaN or false wins', () => {
+      const txns: Transaction[] = [
+        { txn_id: 'tx_nobudget', user_id: 'u1', txn_date: '2026-10-03', txn_time: '15:00:00', amount: 500, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Food & Dining' },
+      ];
+
+      const res = calculateMonthly(0, zeroWeeklyBudgets, txns);
+      const w1 = res.weeks[0];
+      expect(w1.budgetAmount).toBe(0);
+      expect(w1.actualSpending).toBe(500);
+      expect(w1.categoryBreakdown.length).toBe(1);
+      expect(w1.categoryBreakdown[0].category).toBe('Food & Dining');
+      expect(w1.categoryBreakdown[0].amount).toBe(500);
+      expect(w1.categoryBreakdown[0].percentageOfTotal).toBe(100);
+
+      // Verify no NaN or false savings
+      expect(w1.differencePercentage).toBe(0);
+      expect(isNaN(w1.differencePercentage)).toBe(false);
+      expect(w1.boxLabel).toBe('In Progress');
+      expect(w1.resultMessage).toContain('₹500 spent. Set your weekly budget to track savings.');
+    });
+
+    it('Scenario 7 & 8: Completing Week 1 locks its result while Week 2 remains editable', () => {
+      const budgets: Budget[] = [
+        { ...zeroWeeklyBudgets[0], amount: 2000, is_completed: true, completed_at: '2026-10-07T20:00:00Z' },
+        { ...zeroWeeklyBudgets[1], amount: 2500, is_completed: false },
+        { ...zeroWeeklyBudgets[2], amount: 2000, is_completed: false },
+        { ...zeroWeeklyBudgets[3], amount: 2500, is_completed: false },
+      ];
+
+      const txns: Transaction[] = [
+        { txn_id: 'tx_w1', user_id: 'u1', txn_date: '2026-10-03', txn_time: '12:00:00', amount: 1600, transaction_type: 'debit', payment_mode: 'UPI', main_category: 'Groceries' },
+      ];
+
+      const res = calculateMonthly(9000, budgets, txns);
+      expect(res.weeks[0].isCompleted).toBe(true);
+      expect(res.weeks[0].boxLabel).toBe('+20% Saved');
+      expect(res.weeks[0].resultStatus).toBe('win');
+
+      // Week 2 is in progress / upcoming, NOT completed
+      expect(res.weeks[1].isCompleted).toBe(false);
+      expect(res.weeks[1].budgetAmount).toBe(2500);
+    });
+  });
 });

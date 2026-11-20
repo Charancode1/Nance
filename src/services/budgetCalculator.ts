@@ -145,7 +145,7 @@ export function calculateWeek(
 
   const actualSpending = Math.round(eligibleSpending * 100) / 100;
   const remainingBudget = Math.round((budgetAmount - actualSpending) * 100) / 100;
-  const isUnderBudget = remainingBudget >= 0;
+  const isUnderBudget = budgetAmount > 0 ? remainingBudget >= 0 : actualSpending === 0;
 
   const spendingPercentage =
     budgetAmount > 0 ? Math.round((actualSpending / budgetAmount) * 1000) / 10 : 0;
@@ -154,28 +154,53 @@ export function calculateWeek(
     budgetAmount > 0 ? Math.round((Math.abs(remainingBudget) / budgetAmount) * 100) : 0;
 
   let resultStatus: 'win' | 'over' | 'pending' = 'pending';
-  let boxLabel = 'Not Started';
-  let resultMessage = 'Week in progress. Add your expenses and tap Finish Week.';
+  let boxLabel = 'Not Set';
+  let resultMessage = 'Set your weekly budget to start.';
 
-  if (isCompleted) {
-    if (isUnderBudget) {
-      resultStatus = 'win';
-      boxLabel = `+${diffPct}% Saved`;
-      resultMessage = `You completed this week's money goal. Great work! Kept ₹${remainingBudget.toLocaleString('en-IN')} unspent.`;
+  if (budgetAmount === 0) {
+    // Zero-Budget Calculation Safety:
+    // Never show NaN, Infinity, or false 100% savings when budget is ₹0
+    if (isCompleted) {
+      if (actualSpending > 0) {
+        resultStatus = 'over';
+        boxLabel = 'Over Budget';
+        resultMessage = `Completed week with ₹${actualSpending.toLocaleString('en-IN')} spent and ₹0 budget.`;
+      } else {
+        resultStatus = 'pending';
+        boxLabel = 'No Budget';
+        resultMessage = 'Completed week with ₹0 budget. Set budget for percentage savings.';
+      }
     } else {
-      resultStatus = 'over';
-      boxLabel = `${diffPct}% Over`;
-      resultMessage = `A little over budget this week. Don't worry! Every week is a fresh opportunity. You can get back on track next week. Keep going!`;
+      if (actualSpending > 0) {
+        boxLabel = 'In Progress';
+        resultMessage = `₹${actualSpending.toLocaleString('en-IN')} spent. Set your weekly budget to track savings.`;
+      } else {
+        boxLabel = 'Not Set';
+        resultMessage = 'Set your weekly budget to start.';
+      }
     }
   } else {
-    if (actualSpending > 0) {
-      boxLabel = 'In Progress';
-      resultMessage = `Currently ₹${Math.abs(remainingBudget).toLocaleString('en-IN')} ${
-        isUnderBudget ? 'left to spend' : 'over budget'
-      }.`;
+    // Normal calculation when budget > 0
+    if (isCompleted) {
+      if (isUnderBudget) {
+        resultStatus = 'win';
+        boxLabel = `+${diffPct}% Saved`;
+        resultMessage = `You completed this week's money goal. Great work! Kept ₹${remainingBudget.toLocaleString('en-IN')} unspent.`;
+      } else {
+        resultStatus = 'over';
+        boxLabel = `${diffPct}% Over`;
+        resultMessage = `A little over budget this week. Don't worry! Every week is a fresh opportunity. You can get back on track next week. Keep going!`;
+      }
     } else {
-      boxLabel = 'Not Started';
-      resultMessage = `₹${budgetAmount.toLocaleString('en-IN')} budget set for this week. No expenses recorded yet.`;
+      if (actualSpending > 0) {
+        boxLabel = 'In Progress';
+        resultMessage = `Currently ₹${Math.abs(remainingBudget).toLocaleString('en-IN')} ${
+          isUnderBudget ? 'left to spend' : 'over budget'
+        }.`;
+      } else {
+        boxLabel = 'Not Started';
+        resultMessage = `₹${budgetAmount.toLocaleString('en-IN')} budget set for this week. No expenses recorded yet.`;
+      }
     }
   }
 
@@ -295,10 +320,18 @@ export function calculateMonthly(
   let subMessage = '';
 
   if (completedWeeksCount === 0) {
-    headlineMessage = 'START YOUR FIRST WEEK';
-    subMessage = 'Your first weekly win starts here!';
+    if (monthlyBudget === 0) {
+      headlineMessage = 'SET YOUR BUDGET TO START';
+      subMessage = 'Set your monthly and weekly budgets to start tracking.';
+    } else {
+      headlineMessage = 'START YOUR FIRST WEEK';
+      subMessage = 'Your first weekly win starts here!';
+    }
   } else if (allWeeksCompleted) {
-    if (isUnderBudget) {
+    if (completedWeeklyBudget === 0) {
+      headlineMessage = 'ALL WEEKS COMPLETED';
+      subMessage = 'Completed with ₹0 budget. Set your budget to track savings.';
+    } else if (isUnderBudget) {
       headlineMessage = `${monthlyProgressPercentage}% BUDGET SAVED THIS MONTH!`;
       subMessage = 'Congratulations! Four weeks of mindful money decisions. Keep building this habit.';
     } else {
@@ -307,7 +340,10 @@ export function calculateMonthly(
     }
   } else {
     // In-progress: 1 to 3 completed weeks
-    if (isUnderBudget) {
+    if (completedWeeklyBudget === 0) {
+      headlineMessage = 'WEEKS COMPLETED';
+      subMessage = 'Set a budget in Set Budget to calculate your savings percentage.';
+    } else if (isUnderBudget) {
       headlineMessage = `${monthlyProgressPercentage}% SAVED SO FAR`;
       subMessage = 'You are doing great! Keep your momentum going.';
     } else {

@@ -97,19 +97,37 @@ export const MobileWeeklyTracker: React.FC<MobileWeeklyTrackerProps> = ({
 
         <div>
           <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-            {isUnderBudget ? 'Remaining' : 'Exceeded'}
+            {budgetAmount === 0 ? (actualSpending > 0 ? 'Exceeded' : 'Balance') : isUnderBudget ? 'Remaining' : 'Exceeded'}
           </span>
           <span
             className={`text-sm sm:text-base font-black ${
-              isUnderBudget ? 'text-emerald-600' : 'text-amber-600'
+              budgetAmount === 0
+                ? actualSpending > 0
+                  ? 'text-amber-600'
+                  : 'text-slate-500'
+                : isUnderBudget
+                ? 'text-emerald-600'
+                : 'text-amber-600'
             }`}
           >
-            {isUnderBudget
+            {budgetAmount === 0
+              ? actualSpending > 0
+                ? `-${formatINR(actualSpending)}`
+                : '₹0'
+              : isUnderBudget
               ? `+${formatINR(remainingBudget)}`
               : `-${formatINR(Math.abs(remainingBudget))}`}
           </span>
         </div>
       </div>
+
+      {/* Neutral prompt when budget is ₹0 */}
+      {budgetAmount === 0 && (
+        <div className="bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/80 text-xs text-slate-500 flex items-center justify-between">
+          <span>Set your weekly budget to start.</span>
+          <span className="text-[10px] font-bold text-slate-400 bg-slate-200/60 px-1.5 py-0.5 rounded">₹0 Budget</span>
+        </div>
+      )}
 
       {/* 5. Category Spending: Compact Two-Column Percentage Cards Grid */}
       <div>

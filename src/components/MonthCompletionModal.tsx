@@ -20,20 +20,22 @@ export const MonthCompletionModal: React.FC<MonthCompletionModalProps> = ({
   const {
     monthlyProgressPercentage,
     isUnderBudget,
+    completedWeeklyBudget,
     weeklyWinsCount,
     totalWeeksCount,
     completedDifference,
     weeks,
   } = monthlyCalc;
 
+  const isZeroBudgetMonth = completedWeeklyBudget === 0;
   const week4 = weeks.find((w) => w.weekIndex === 4);
 
-  // Trigger celebratory burst on final month completion
+  // Trigger celebratory burst on final month completion ONLY when saving with a set budget
   useEffect(() => {
-    if (isOpen && isUnderBudget) {
+    if (isOpen && isUnderBudget && !isZeroBudgetMonth) {
       fireCelebrationBurst();
     }
-  }, [isOpen, isUnderBudget]);
+  }, [isOpen, isUnderBudget, isZeroBudgetMonth]);
 
   if (!isOpen) return null;
 
@@ -66,13 +68,17 @@ export const MonthCompletionModal: React.FC<MonthCompletionModalProps> = ({
         {/* Main Headline */}
         <div className="my-2.5">
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
-            {isUnderBudget
+            {isZeroBudgetMonth
+              ? 'All 4 weeks completed!'
+              : isUnderBudget
               ? `You saved ${monthlyProgressPercentage}% of your planned budget this month!`
               : `Finished ${monthlyProgressPercentage}% over planned budget`}
           </h3>
 
           <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-            Congratulations! Four weeks of mindful money decisions. Keep building this habit.
+            {isZeroBudgetMonth
+              ? 'Great effort finishing the month! Configure your monthly and weekly budgets anytime in Set Budget to start tracking savings percentages.'
+              : 'Congratulations! Four weeks of mindful money decisions. Keep building this habit.'}
           </p>
         </div>
 
